@@ -1,0 +1,93 @@
+#pragma once
+
+#include <QtGlobal>
+#include <QString>
+
+struct DeviceState
+{
+    QString deviceId;
+    QString displayName;
+    bool online = false;
+    QString protocolProfile = QStringLiteral("relay_v1");
+    bool relay1On = false;
+    bool relay2On = false;
+    QString padLeftState = QStringLiteral("closed");
+    QString padRightState = QStringLiteral("closed");
+    bool padReady = false;
+    bool padOccupied = false;
+    QString padMode = QStringLiteral("auto");
+    int rssi = 0;
+    QString operatorName;
+    QString ip;
+    QString stateText;
+    qint64 tick = 0;
+    double windSpeed = 0.0;
+    double windDirection = 0.0;
+    double temperature = 0.0;
+    double humidity = 0.0;
+    double pressure = 0.0;
+    double visibility = 0.0;
+    QString timestamp;
+    qint64 lastSeenMs = 0;
+    int activeAlarmCount = 0;
+};
+
+struct AckMessage
+{
+    QString msgId;
+    QString deviceId;
+    QString cmd;
+    QString result;
+    QString detail;
+    bool relay1On = false;
+    bool relay2On = false;
+    QString timestamp;
+};
+
+struct OnlineMessage
+{
+    QString deviceId;
+    bool online = false;
+    QString timestamp;
+};
+
+struct MessageRecord
+{
+    qint64 id = 0;
+    QString deviceId;
+    QString direction;
+    QString channel;
+    QString topic;
+    QString command;
+    QString payload;
+    QString result;
+    QString operatorName;
+    QString level;
+    QString createdAt;
+};
+
+struct AlarmRecord
+{
+    qint64 id = 0;
+    QString alarmKey;
+    QString deviceId;
+    QString code;
+    QString severity;
+    QString message;
+    QString source;
+    bool active = true;
+    QString createdAt;
+    QString resolvedAt;
+};
+
+struct UserSession
+{
+    QString username;
+    QString displayName;
+    QString token;
+    QString refreshToken;
+    QString role;
+    QString accessExpiresAt;
+    QString refreshExpiresAt;
+    bool localFallback = false;
+};

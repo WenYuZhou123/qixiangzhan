@@ -1,0 +1,67 @@
+# Secrets
+*.env
+*.env.local
+*.signing.env
+*.signing.env.ps1
+*.signing.env.cmd
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.idsig
+
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/app/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Qt / CMake / Android build outputs
+qt-client/build/
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.aab
+*.apk
+*.ap_
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+
+# IDE / editor
+.idea/
+.vscode/
+*.user
+*.pro.user
+*.qtc_clangd/
+
+# Keil / STM32 generated intermediates
+MDK-ARM/*.bak
+MDK-ARM/*.dep
+MDK-ARM/*.crf
+MDK-ARM/*.d
+MDK-ARM/*.o
+MDK-ARM/*.axf
+MDK-ARM/*.map
+MDK-ARM/*.lst
+MDK-ARM/Objects/
+MDK-ARM/Listings/
+MDK-ARM/*.uvguix.*
+
+# Local temp helper files
+.git_filelist.txt
+
+# Runtime / local data
+tmp/
+*.log
+*.tmp
+Thumbs.db
+Desktop.ini
