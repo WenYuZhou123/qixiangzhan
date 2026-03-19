@@ -338,9 +338,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H743xx</Define>
+              <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H743xx,HAL_ADC_MODULE_ENABLED,HAL_SRAM_MODULE_ENABLED</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../HARDWARE;../HARDWARE/APP;../HARDWARE/RElAY;../HARDWARE/KEY;../HARDWARE/L610;../HARDWARE/PROTOCOL;../HARDWARE/CONSOLE;../HARDWARE/WEATHER</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../HARDWARE;../HARDWARE/APP;../HARDWARE/RElAY;../HARDWARE/KEY;../HARDWARE/L610;../HARDWARE/PROTOCOL;../HARDWARE/CONSOLE;../HARDWARE/WEATHER;../HARDWARE/LCD</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -489,6 +489,16 @@
               <FileName>stm32h7xx_hal_adc_ex.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_adc_ex.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32h7xx_hal_sram.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_sram.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32h7xx_ll_fmc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_ll_fmc.c</FilePath>
             </File>
             <File>
               <FileName>stm32h7xx_hal_cortex.c</FileName>
@@ -856,6 +866,56 @@
               <FileName>weather_data.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\HARDWARE\WEATHER\weather_data.h</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_port.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_port.h</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_touch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_touch.c</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_touch.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_touch.h</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_ui_model.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_ui_model.c</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_ui_model.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_ui_model.h</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_ui_pages.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_ui_pages.c</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_ui_pages.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_ui_pages.h</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_debug_ui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_debug_ui.c</FilePath>
+            </File>
+            <File>
+              <FileName>lcd_debug_ui.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\HARDWARE\LCD\lcd_debug_ui.h</FilePath>
             </File>
           </Files>
         </Group>

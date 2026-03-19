@@ -3,6 +3,14 @@
 #include "weather_data.h"
 #include "stm32h7xx_hal.h"
 
+#ifndef RAIN_DO_GPIO_Port
+#define RAIN_DO_GPIO_Port GPIOB
+#endif
+
+#ifndef RAIN_DO_Pin
+#define RAIN_DO_Pin GPIO_PIN_7
+#endif
+
 #define RAIN_SENSOR_ACTIVE_LEVEL      GPIO_PIN_RESET
 #define RAIN_SENSOR_INACTIVE_LEVEL    GPIO_PIN_SET
 #define RAIN_SENSOR_DEBOUNCE_COUNT    3U

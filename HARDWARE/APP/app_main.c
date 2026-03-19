@@ -6,6 +6,10 @@
 #include "l610_mqtt.h"
 #include "app_weather.h"
 #include "weather_data.h"
+#include "sensor_air_cj702.h"
+#include "sensor_wind_zts.h"
+#include "sensor_rain.h"
+#include "lcd_debug_ui.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -89,6 +93,20 @@ void App_FillDeviceStatus(App_DeviceStatus_t *status)
     status->weather.co2 = g_weather_data.co2_ppm;
     status->weather.tvoc = g_weather_data.tvoc_mg_m3;
     status->weather.ch2o = g_weather_data.ch2o_mg_m3;
+    status->weather.wind_adc_raw = g_wind_sensor.speed_raw_adc;
+    status->weather.direction_adc_raw = g_wind_sensor.direction_raw_adc;
+    status->weather.cj702_online = g_air_sensor.base.online;
+    status->weather.wind_online = g_weather_data.wind_online;
+    status->weather.rain_online = g_weather_data.rain_online;
+    status->alarm_count = 0U;
+    status->last_status_publish_ok = L610_MQTT_GetLastStatusPublishOk();
+    status->last_status_publish_tick = L610_MQTT_GetLastStatusPublishTick();
+    strncpy(status->last_error_text,
+            (L610_MQTT_IsConnected() != 0) ? "OK" : L610_MQTT_GetStateString(),
+            sizeof(status->last_error_text) - 1U);
+    strncpy(status->last_cj702_frame_hex,
+            (AirSensor_LastFrameHex()[0] != '\0') ? AirSensor_LastFrameHex() : "N/A",
+            sizeof(status->last_cj702_frame_hex) - 1U);
 
     strncpy(status->state_text, "running", sizeof(status->state_text) - 1U);
     if (L610_GetCachedInfo(&info) == L610_OK)
@@ -141,6 +159,7 @@ void App_MainInit(void)
     L610_Init();
     L610_MQTT_Init();
     AppWeather_Init();
+    LCD_DebugUI_Init();
     HAL_Delay(3000);
     l610_sync_status = L610_Sync(1);
     App_PrintDiagBanner(l610_sync_status);
@@ -151,6 +170,7 @@ void App_MainTask(void)
 {
     L610_MQTT_Task();
     AppWeather_Task();
+    LCD_DebugUI_Task();
 
     if (L610_MQTT_GetState() >= MQTT_STATE_SUBSCRIBED)
     {

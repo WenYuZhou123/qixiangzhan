@@ -20,5 +20,6 @@ extern AirSensor_t g_air_sensor;
 void AirSensor_Init(void);
 void AirSensor_Poll(void);
 void AirSensor_Parse(void);
+const char *AirSensor_LastFrameHex(void);
 
 #endif

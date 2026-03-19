@@ -2,6 +2,7 @@
 #include "bsp_uart.h"
 #include "weather_data.h"
 #include "stm32h7xx_hal.h"
+#include <stdio.h>
 #include <string.h>
 
 #define CJ702_FRAME_LEN 17U
@@ -12,6 +13,33 @@ AirSensor_t g_air_sensor = {0};
 
 static uint8_t air_rx_cache[64];
 static uint16_t air_rx_cache_len = 0U;
+static char air_last_frame_hex[128];
+
+static void AirSensor_SaveFrameHex(const uint8_t *buf, uint16_t len)
+{
+    uint16_t i = 0U;
+    uint16_t pos = 0U;
+
+    if (buf == 0)
+    {
+        air_last_frame_hex[0] = '\0';
+        return;
+    }
+
+    for (i = 0U; (i < len) && (pos + 4U < sizeof(air_last_frame_hex)); ++i)
+    {
+        pos += (uint16_t)snprintf(&air_last_frame_hex[pos], sizeof(air_last_frame_hex) - pos, "%02X ", buf[i]);
+    }
+
+    if ((pos > 0U) && (pos < sizeof(air_last_frame_hex)))
+    {
+        air_last_frame_hex[pos - 1U] = '\0';
+    }
+    else
+    {
+        air_last_frame_hex[sizeof(air_last_frame_hex) - 1U] = '\0';
+    }
+}
 
 static uint8_t AirSensor_CheckFrame(const uint8_t *buf, uint16_t len)
 {
@@ -63,6 +91,7 @@ void AirSensor_Init(void)
     g_air_sensor.base.online = 0U;
     g_air_sensor.base.last_update_tick = 0U;
     air_rx_cache_len = 0U;
+    air_last_frame_hex[0] = '\0';
 }
 
 void AirSensor_Poll(void)
@@ -121,6 +150,7 @@ void AirSensor_Parse(void)
 
         if (AirSensor_CheckFrame(air_rx_cache, CJ702_FRAME_LEN) != 0U)
         {
+            AirSensor_SaveFrameHex(air_rx_cache, CJ702_FRAME_LEN);
             AirSensor_DecodeFrame(air_rx_cache);
             g_air_sensor.base.last_update_tick = HAL_GetTick();
             g_air_sensor.base.online = 1U;
@@ -133,4 +163,9 @@ void AirSensor_Parse(void)
             air_rx_cache_len -= 1U;
         }
     }
+}
+
+const char *AirSensor_LastFrameHex(void)
+{
+    return air_last_frame_hex;
 }

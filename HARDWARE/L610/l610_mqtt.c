@@ -87,6 +87,8 @@ static uint8_t mqtt_online_state = 1U;
 static uint8_t mqtt_subscribe_refresh_pending = 0U;
 static uint8_t mqtt_subscribe_refresh_done = 0U;
 static uint32_t mqtt_subscribe_refresh_tick = 0U;
+static uint8_t mqtt_last_status_publish_ok = 0U;
+static uint32_t mqtt_last_status_publish_tick = 0U;
 static char mqtt_recent_msg_ids[MQTT_RECENT_CMD_DEPTH][MQTT_CMD_ID_BUF_SIZE];
 static uint8_t mqtt_recent_msg_index = 0U;
 
@@ -2079,6 +2081,16 @@ const char *L610_MQTT_GetLastLine(void)
     return mqtt_last_line;
 }
 
+uint8_t L610_MQTT_GetLastStatusPublishOk(void)
+{
+    return mqtt_last_status_publish_ok;
+}
+
+uint32_t L610_MQTT_GetLastStatusPublishTick(void)
+{
+    return mqtt_last_status_publish_tick;
+}
+
 L610_MQTT_Status_t L610_MQTT_SetAPN(const char *apn)
 {
     char cmd[80];
@@ -2575,10 +2587,16 @@ L610_MQTT_Status_t L610_MQTT_PublishStatus(void)
 {
     if (L610_MQTT_BuildStatusJson(mqtt_json_buf, sizeof(mqtt_json_buf)) != L610_MQTT_OK)
     {
+        mqtt_last_status_publish_ok = 0U;
+        mqtt_last_status_publish_tick = HAL_GetTick();
         return L610_MQTT_ERROR;
     }
-
-    return L610_MQTT_PublishEx(mqtt_config.topic_status, mqtt_json_buf, mqtt_config.default_qos, 1U);
+    {
+        L610_MQTT_Status_t publish_status = L610_MQTT_PublishEx(mqtt_config.topic_status, mqtt_json_buf, mqtt_config.default_qos, 1U);
+        mqtt_last_status_publish_ok = (uint8_t)((publish_status == L610_MQTT_OK) ? 1U : 0U);
+        mqtt_last_status_publish_tick = HAL_GetTick();
+        return publish_status;
+    }
 }
 
 L610_MQTT_Status_t L610_MQTT_RequestStatusRefresh(void)

@@ -80,6 +80,27 @@ Current desktop client executable:
 
 - `qt-client\build\desktop-verify\relay_qt_client.exe`
 
+## 2.1 Weather sensor wiring note
+
+Before testing the weather module on hardware, use the following conservative wiring rules:
+
+- `CJ702-U` air module:
+  - `VDD` -> external sensor supply
+  - `GND` -> external sensor ground
+  - `GND` -> STM32 GND
+  - `TX` -> `USART3_RX (PB11)`
+  - `NC` left floating
+- If the `CJ702-U` `TX` output is 5V TTL, do not connect it directly to `PB11`.
+  Add level shifting or a safe divider first.
+- `ZTS-3000-FSJT-V02` wind-speed transmitter:
+  - brown -> sensor supply positive (`10~30V`)
+  - black -> sensor supply negative
+  - blue -> output positive
+  - yellow/green -> output negative
+- Do not directly connect the raw wind transmitter output pair to `PA6/PC4`.
+  The current firmware only supports testing after a differential-to-single-ended
+  analog frontend has converted the sensor output into an MCU-safe ADC voltage.
+
 If you want to start pieces manually:
 
 ```powershell

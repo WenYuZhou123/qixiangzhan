@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #include "main.h"
+#include "stm32h7xx_hal_adc.h"
 
 extern ADC_HandleTypeDef hadc1;
 

@@ -2,6 +2,16 @@
 #include "adc.h"
 #include "weather_data.h"
 #include "stm32h7xx_hal.h"
+#include "stm32h7xx_hal_adc.h"
+
+/*
+ * Current implementation assumes the wind-speed / wind-direction signal has already
+ * been converted from the sensor's differential industrial analog output to a safe
+ * single-ended ADC voltage referenced to MCU GND.
+ *
+ * Do NOT directly connect the raw differential output pair of a 10-30V transmitter
+ * to STM32 ADC pins before confirming the frontend circuit and common-reference rule.
+ */
 
 #define WIND_SPEED_ADC_CHANNEL         ADC_CHANNEL_3
 #define WIND_DIRECTION_ADC_CHANNEL     ADC_CHANNEL_4

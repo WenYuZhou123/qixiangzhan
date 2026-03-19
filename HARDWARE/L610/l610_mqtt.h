@@ -136,6 +136,8 @@ int L610_MQTT_IsConnected(void);
 int L610_MQTT_IsReady(void);
 int L610_MQTT_GetLastResultCode(void);
 const char *L610_MQTT_GetLastLine(void);
+uint8_t L610_MQTT_GetLastStatusPublishOk(void);
+uint32_t L610_MQTT_GetLastStatusPublishTick(void);
 
 L610_MQTT_Status_t L610_MQTT_SetAPN(const char *apn);
 L610_MQTT_Status_t L610_MQTT_RequestIP(void);
