@@ -80,6 +80,10 @@ Item {
         required property bool padOccupied
         required property int rssi
         required property int alarmCount
+        required property real windSpeed
+        required property real temperature
+        required property bool rainDetected
+        required property real pm25
         required property bool selected
 
         Layout.fillWidth: true
@@ -161,7 +165,16 @@ Item {
             Label {
                 width: parent.width
                 text: "RSSI " + rssi + "  ·  " + (padReady ? "允许降落" : "待命") + "  ·  "
-                      + theme.occupancyText(padOccupied) + "  ·  告警 " + alarmCount
+                      + theme.occupancyText(padOccupied) + "  ·  风速 " + Number(windSpeed).toFixed(1) + " m/s"
+                color: theme.textMuted
+                font.pixelSize: 12
+                elide: Text.ElideRight
+            }
+
+            Label {
+                width: parent.width
+                text: "温度 " + Number(temperature).toFixed(1) + " °C  ·  "
+                      + "雨滴 " + (rainDetected ? "检测到" : "未检测到") + "  ·  PM2.5 " + Number(pm25).toFixed(0)
                 color: theme.textMuted
                 font.pixelSize: 12
                 elide: Text.ElideRight
@@ -407,6 +420,24 @@ Item {
                         value: store.padReady ? "允许降落" : "待命"
                         caption: theme.occupancyText(store.padOccupied) + " · " + theme.padModeText(store.padMode)
                     }
+
+                    MetricCard {
+                        title: "颗粒物"
+                        value: "PM2.5 " + Number(store.pm25).toFixed(0)
+                        caption: "PM10 " + Number(store.pm10).toFixed(0) + " ug/m3"
+                    }
+
+                    MetricCard {
+                        title: "空气成分"
+                        value: "CO2 " + Number(store.co2).toFixed(0) + " ppm"
+                        caption: "TVOC " + Number(store.tvoc).toFixed(3) + " / CH2O " + Number(store.ch2o).toFixed(3)
+                    }
+
+                    MetricCard {
+                        title: "雨滴"
+                        value: store.rainDetected ? "检测到" : "未检测到"
+                        caption: "雨量值 " + Number(store.rainValue).toFixed(1)
+                    }
                 }
 
                 Rectangle {
@@ -443,6 +474,10 @@ Item {
                                 padOccupied: model.padOccupied
                                 rssi: model.rssi
                                 alarmCount: model.alarmCount
+                                windSpeed: model.windSpeed
+                                temperature: model.temperature
+                                rainDetected: model.rainDetected
+                                pm25: model.pm25
                                 selected: model.selected
                             }
                         }
@@ -625,6 +660,10 @@ Item {
                         padOccupied: model.padOccupied
                         rssi: model.rssi
                         alarmCount: model.alarmCount
+                        windSpeed: model.windSpeed
+                        temperature: model.temperature
+                        rainDetected: model.rainDetected
+                        pm25: model.pm25
                         selected: model.selected
                     }
                 }

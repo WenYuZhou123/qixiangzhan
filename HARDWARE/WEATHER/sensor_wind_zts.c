@@ -10,6 +10,8 @@
 #define WIND_SENSOR_OUTPUT_MAX_VOLTAGE 2.0f
 #define WIND_SPEED_FULL_SCALE_MPS      30.0f
 
+WindSensor_t g_wind_sensor = {0};
+
 static uint16_t WindSensor_ReadAdcChannel(uint32_t channel)
 {
     ADC_ChannelConfTypeDef sConfig = {0};

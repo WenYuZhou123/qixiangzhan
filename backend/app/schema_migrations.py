@@ -61,6 +61,20 @@ def ensure_runtime_schema() -> None:
         statements.append("ALTER TABLE devices ADD COLUMN weather_pressure FLOAT NOT NULL DEFAULT 0")
     if "weather_visibility" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_visibility FLOAT NOT NULL DEFAULT 0")
+    if "weather_rain_detected" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_rain_detected BOOLEAN NOT NULL DEFAULT 0")
+    if "weather_rain_value" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_rain_value FLOAT NOT NULL DEFAULT 0")
+    if "weather_pm25" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_pm25 FLOAT NOT NULL DEFAULT 0")
+    if "weather_pm10" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_pm10 FLOAT NOT NULL DEFAULT 0")
+    if "weather_co2" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_co2 FLOAT NOT NULL DEFAULT 0")
+    if "weather_tvoc" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_tvoc FLOAT NOT NULL DEFAULT 0")
+    if "weather_ch2o" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_ch2o FLOAT NOT NULL DEFAULT 0")
 
     with engine.begin() as conn:
         for statement in statements:

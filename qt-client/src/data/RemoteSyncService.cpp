@@ -131,6 +131,13 @@ DeviceState deviceStateFromJson(const QJsonObject &object)
     state.humidity = readNumberLike(weather.value(QStringLiteral("humidity")));
     state.pressure = readNumberLike(weather.value(QStringLiteral("pressure")));
     state.visibility = readNumberLike(weather.value(QStringLiteral("visibility")));
+    state.rainDetected = readBoolLike(weather.value(QStringLiteral("rain_detected")), false);
+    state.rainValue = readNumberLike(weather.value(QStringLiteral("rain_value")));
+    state.pm25 = readNumberLike(weather.value(QStringLiteral("pm25")));
+    state.pm10 = readNumberLike(weather.value(QStringLiteral("pm10")));
+    state.co2 = readNumberLike(weather.value(QStringLiteral("co2")));
+    state.tvoc = readNumberLike(weather.value(QStringLiteral("tvoc")));
+    state.ch2o = readNumberLike(weather.value(QStringLiteral("ch2o")));
     state.timestamp = object.value(QStringLiteral("last_seen_at")).toString(
         object.value(QStringLiteral("updated_at")).toString());
     state.lastSeenMs = QDateTime::currentMSecsSinceEpoch();

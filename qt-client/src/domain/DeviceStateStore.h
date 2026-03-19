@@ -31,6 +31,13 @@ class DeviceStateStore : public QObject
     Q_PROPERTY(double humidity READ humidity NOTIFY deviceStateChanged)
     Q_PROPERTY(double pressure READ pressure NOTIFY deviceStateChanged)
     Q_PROPERTY(double visibility READ visibility NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool rainDetected READ rainDetected NOTIFY deviceStateChanged)
+    Q_PROPERTY(double rainValue READ rainValue NOTIFY deviceStateChanged)
+    Q_PROPERTY(double pm25 READ pm25 NOTIFY deviceStateChanged)
+    Q_PROPERTY(double pm10 READ pm10 NOTIFY deviceStateChanged)
+    Q_PROPERTY(double co2 READ co2 NOTIFY deviceStateChanged)
+    Q_PROPERTY(double tvoc READ tvoc NOTIFY deviceStateChanged)
+    Q_PROPERTY(double ch2o READ ch2o NOTIFY deviceStateChanged)
     Q_PROPERTY(QString timestamp READ timestamp NOTIFY deviceStateChanged)
     Q_PROPERTY(int activeAlarmCount READ activeAlarmCount NOTIFY deviceStateChanged)
     Q_PROPERTY(QString lastAckSummary READ lastAckSummary NOTIFY ackChanged)
@@ -64,6 +71,13 @@ public:
     double humidity() const;
     double pressure() const;
     double visibility() const;
+    bool rainDetected() const;
+    double rainValue() const;
+    double pm25() const;
+    double pm10() const;
+    double co2() const;
+    double tvoc() const;
+    double ch2o() const;
     QString timestamp() const;
     int activeAlarmCount() const;
     QString lastAckSummary() const;

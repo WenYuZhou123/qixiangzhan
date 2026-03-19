@@ -242,6 +242,48 @@ double DeviceStateStore::visibility() const
     return state != nullptr ? state->visibility : 0.0;
 }
 
+bool DeviceStateStore::rainDetected() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->rainDetected : false;
+}
+
+double DeviceStateStore::rainValue() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->rainValue : 0.0;
+}
+
+double DeviceStateStore::pm25() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->pm25 : 0.0;
+}
+
+double DeviceStateStore::pm10() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->pm10 : 0.0;
+}
+
+double DeviceStateStore::co2() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->co2 : 0.0;
+}
+
+double DeviceStateStore::tvoc() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->tvoc : 0.0;
+}
+
+double DeviceStateStore::ch2o() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->ch2o : 0.0;
+}
+
 QString DeviceStateStore::timestamp() const
 {
     const DeviceState *state = currentState();
@@ -320,6 +362,13 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
         state.humidity = readDouble(weather, "humidity", state.humidity);
         state.pressure = readDouble(weather, "pressure", state.pressure);
         state.visibility = readDouble(weather, "visibility", state.visibility);
+        state.rainDetected = readBoolLike(weather, "rain_detected", state.rainDetected);
+        state.rainValue = readDouble(weather, "rain_value", state.rainValue);
+        state.pm25 = readDouble(weather, "pm25", state.pm25);
+        state.pm10 = readDouble(weather, "pm10", state.pm10);
+        state.co2 = readDouble(weather, "co2", state.co2);
+        state.tvoc = readDouble(weather, "tvoc", state.tvoc);
+        state.ch2o = readDouble(weather, "ch2o", state.ch2o);
     }
     else
     {
@@ -329,6 +378,13 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
         state.humidity = readDouble(json, "weather_humidity", state.humidity);
         state.pressure = readDouble(json, "weather_pressure", state.pressure);
         state.visibility = readDouble(json, "weather_visibility", state.visibility);
+        state.rainDetected = readBoolLike(json, "weather_rain_detected", state.rainDetected);
+        state.rainValue = readDouble(json, "weather_rain_value", state.rainValue);
+        state.pm25 = readDouble(json, "weather_pm25", state.pm25);
+        state.pm10 = readDouble(json, "weather_pm10", state.pm10);
+        state.co2 = readDouble(json, "weather_co2", state.co2);
+        state.tvoc = readDouble(json, "weather_tvoc", state.tvoc);
+        state.ch2o = readDouble(json, "weather_ch2o", state.ch2o);
     }
     state.timestamp = readString(json, "timestamp", state.timestamp);
     state.lastSeenMs = QDateTime::currentMSecsSinceEpoch();

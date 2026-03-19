@@ -300,7 +300,33 @@ ProtocolStatus_t Protocol_Parse(char *cmd)
         Protocol_SetResponse("OK");
         return PROTOCOL_OK;
     }
+    else if (Protocol_StrEqual(cmd, "PAD_OPEN"))
+    {
+        Relay_AllOn();
+        Protocol_SetStatusText("OK");
+        Protocol_SetResponse("OK");
+        return PROTOCOL_OK;
+    }
+    else if (Protocol_StrEqual(cmd, "PAD_CLOSE"))
+    {
+        Relay_AllOff();
+        Protocol_SetStatusText("OK");
+        Protocol_SetResponse("OK");
+        return PROTOCOL_OK;
+    }
+    else if (Protocol_StrEqual(cmd, "PAD_STOP"))
+    {
+        Protocol_SetStatusText("OK");
+        Protocol_SetResponse("OK");
+        return PROTOCOL_OK;
+    }
     else if (Protocol_StrEqual(cmd, "STATUS"))
+    {
+        Protocol_SetStatusText("OK");
+        Protocol_GetStatusString(protocol_response_buf, sizeof(protocol_response_buf));
+        return PROTOCOL_OK;
+    }
+    else if (Protocol_StrEqual(cmd, "QUERY_PAD_STATUS"))
     {
         Protocol_SetStatusText("OK");
         Protocol_GetStatusString(protocol_response_buf, sizeof(protocol_response_buf));

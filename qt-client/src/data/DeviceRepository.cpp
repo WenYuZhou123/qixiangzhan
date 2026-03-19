@@ -84,6 +84,20 @@ QVariant DeviceRepository::data(const QModelIndex &index, int role) const
         return item.pressure;
     case VisibilityRole:
         return item.visibility;
+    case RainDetectedRole:
+        return item.rainDetected;
+    case RainValueRole:
+        return item.rainValue;
+    case Pm25Role:
+        return item.pm25;
+    case Pm10Role:
+        return item.pm10;
+    case Co2Role:
+        return item.co2;
+    case TvocRole:
+        return item.tvoc;
+    case Ch2oRole:
+        return item.ch2o;
     case TimestampRole:
         return item.timestamp;
     case AlarmCountRole:
@@ -120,6 +134,13 @@ QHash<int, QByteArray> DeviceRepository::roleNames() const
         {HumidityRole, "humidity"},
         {PressureRole, "pressure"},
         {VisibilityRole, "visibility"},
+        {RainDetectedRole, "rainDetected"},
+        {RainValueRole, "rainValue"},
+        {Pm25Role, "pm25"},
+        {Pm10Role, "pm10"},
+        {Co2Role, "co2"},
+        {TvocRole, "tvoc"},
+        {Ch2oRole, "ch2o"},
         {TimestampRole, "timestamp"},
         {AlarmCountRole, "alarmCount"},
         {SelectedRole, "selected"}

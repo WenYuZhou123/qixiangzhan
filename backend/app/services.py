@@ -124,6 +124,13 @@ def normalize_payload_map(payload_map: dict[str, Any], topic: str) -> dict[str, 
                 "humidity": coerce_float(weather.get("humidity"), 0.0),
                 "pressure": coerce_float(weather.get("pressure"), 0.0),
                 "visibility": coerce_float(weather.get("visibility"), 0.0),
+                "rain_detected": coerce_bool(weather.get("rain_detected"), False),
+                "rain_value": coerce_float(weather.get("rain_value"), 0.0),
+                "pm25": coerce_float(weather.get("pm25"), 0.0),
+                "pm10": coerce_float(weather.get("pm10"), 0.0),
+                "co2": coerce_float(weather.get("co2"), 0.0),
+                "tvoc": coerce_float(weather.get("tvoc"), 0.0),
+                "ch2o": coerce_float(weather.get("ch2o"), 0.0),
             }
 
     return normalized
@@ -212,6 +219,13 @@ def extract_weather_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
         "humidity": coerce_float(weather.get("humidity", payload_map.get("weather_humidity")), 0.0),
         "pressure": coerce_float(weather.get("pressure", payload_map.get("weather_pressure")), 0.0),
         "visibility": coerce_float(weather.get("visibility", payload_map.get("weather_visibility")), 0.0),
+        "rain_detected": coerce_bool(weather.get("rain_detected", payload_map.get("weather_rain_detected")), False),
+        "rain_value": coerce_float(weather.get("rain_value", payload_map.get("weather_rain_value")), 0.0),
+        "pm25": coerce_float(weather.get("pm25", payload_map.get("weather_pm25")), 0.0),
+        "pm10": coerce_float(weather.get("pm10", payload_map.get("weather_pm10")), 0.0),
+        "co2": coerce_float(weather.get("co2", payload_map.get("weather_co2")), 0.0),
+        "tvoc": coerce_float(weather.get("tvoc", payload_map.get("weather_tvoc")), 0.0),
+        "ch2o": coerce_float(weather.get("ch2o", payload_map.get("weather_ch2o")), 0.0),
     }
 
 
@@ -380,6 +394,13 @@ def serialize_device(device: Device, active_alarm_count: int = 0) -> dict[str, A
             "humidity": device.weather_humidity,
             "pressure": device.weather_pressure,
             "visibility": device.weather_visibility,
+            "rain_detected": device.weather_rain_detected,
+            "rain_value": device.weather_rain_value,
+            "pm25": device.weather_pm25,
+            "pm10": device.weather_pm10,
+            "co2": device.weather_co2,
+            "tvoc": device.weather_tvoc,
+            "ch2o": device.weather_ch2o,
         },
         "state_text": device.state_text,
         "tick": device.tick,
@@ -713,6 +734,13 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
         device.weather_humidity = weather["humidity"]
         device.weather_pressure = weather["pressure"]
         device.weather_visibility = weather["visibility"]
+        device.weather_rain_detected = weather["rain_detected"]
+        device.weather_rain_value = weather["rain_value"]
+        device.weather_pm25 = weather["pm25"]
+        device.weather_pm10 = weather["pm10"]
+        device.weather_co2 = weather["co2"]
+        device.weather_tvoc = weather["tvoc"]
+        device.weather_ch2o = weather["ch2o"]
         device.state_text = str(payload_map.get("state") or "")
         device.tick = coerce_int(payload_map.get("tick"), 0)
         if is_legacy_status_topic(topic):

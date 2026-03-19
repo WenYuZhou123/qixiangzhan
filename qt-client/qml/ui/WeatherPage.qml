@@ -153,6 +153,34 @@ ScrollView {
                         unit: "km"
                         note: "起降可视环境"
                     }
+
+                    StatCard {
+                        title: "雨滴"
+                        value: store.rainDetected ? "有雨" : "无雨"
+                        unit: ""
+                        note: "雨量值 " + Number(store.rainValue).toFixed(1)
+                    }
+
+                    StatCard {
+                        title: "PM2.5 / PM10"
+                        value: Number(store.pm25).toFixed(0) + " / " + Number(store.pm10).toFixed(0)
+                        unit: "ug/m3"
+                        note: "颗粒物浓度"
+                    }
+
+                    StatCard {
+                        title: "CO2"
+                        value: Number(store.co2).toFixed(0)
+                        unit: "ppm"
+                        note: "空气质量核心指标"
+                    }
+
+                    StatCard {
+                        title: "TVOC / CH2O"
+                        value: Number(store.tvoc).toFixed(3) + " / " + Number(store.ch2o).toFixed(3)
+                        unit: "mg/m3"
+                        note: "挥发物 / 甲醛"
+                    }
                 }
             }
         }
@@ -216,6 +244,18 @@ ScrollView {
                             Label { text: Number(store.windDirection).toFixed(0) + "°"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "能见度"; color: theme.textMuted; font.pixelSize: 12 }
                             Label { text: Number(store.visibility).toFixed(1) + " km"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "雨滴"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: store.rainDetected ? "检测到" : "未检测到"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "PM2.5"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: Number(store.pm25).toFixed(0) + " ug/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "PM10"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: Number(store.pm10).toFixed(0) + " ug/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "CO2"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: Number(store.co2).toFixed(0) + " ppm"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "TVOC"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: Number(store.tvoc).toFixed(3) + " mg/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "CH2O"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: Number(store.ch2o).toFixed(3) + " mg/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "停机场模式"; color: theme.textMuted; font.pixelSize: 12 }
                             Label { text: store.padMode; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                         }

@@ -66,6 +66,13 @@ class WeatherSummaryResponse(BaseModel):
     humidity: float = 0.0
     pressure: float = 0.0
     visibility: float = 0.0
+    rain_detected: bool = False
+    rain_value: float = 0.0
+    pm25: float = 0.0
+    pm10: float = 0.0
+    co2: float = 0.0
+    tvoc: float = 0.0
+    ch2o: float = 0.0
 
 
 class DeviceResponse(BaseModel):

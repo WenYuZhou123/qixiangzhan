@@ -27,6 +27,13 @@ struct DeviceState
     double humidity = 0.0;
     double pressure = 0.0;
     double visibility = 0.0;
+    bool rainDetected = false;
+    double rainValue = 0.0;
+    double pm25 = 0.0;
+    double pm10 = 0.0;
+    double co2 = 0.0;
+    double tvoc = 0.0;
+    double ch2o = 0.0;
     QString timestamp;
     qint64 lastSeenMs = 0;
     int activeAlarmCount = 0;

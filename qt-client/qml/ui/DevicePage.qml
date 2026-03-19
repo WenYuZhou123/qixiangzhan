@@ -435,6 +435,23 @@ ScrollView {
                             }
 
                             Label {
+                                text: "雨滴 " + (store.rainDetected ? "检测到" : "未检测到")
+                                      + "  ·  PM2.5 " + Number(store.pm25).toFixed(0)
+                                      + "  ·  PM10 " + Number(store.pm10).toFixed(0)
+                                color: theme.textMuted
+                                font.pixelSize: 12
+                            }
+
+                            Label {
+                                text: "CO2 " + Number(store.co2).toFixed(0)
+                                      + " ppm  ·  TVOC " + Number(store.tvoc).toFixed(3)
+                                      + " mg/m3  ·  CH2O " + Number(store.ch2o).toFixed(3) + " mg/m3"
+                                color: theme.textMuted
+                                font.pixelSize: 12
+                                wrapMode: Text.Wrap
+                            }
+
+                            Label {
                                 text: "适航建议：" + theme.flightRuleText(store.windSpeed, store.visibility)
                                 color: theme.flightRuleColor(store.windSpeed, store.visibility)
                                 font.pixelSize: 14

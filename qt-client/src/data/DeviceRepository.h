@@ -37,6 +37,13 @@ public:
         HumidityRole,
         PressureRole,
         VisibilityRole,
+        RainDetectedRole,
+        RainValueRole,
+        Pm25Role,
+        Pm10Role,
+        Co2Role,
+        TvocRole,
+        Ch2oRole,
         TimestampRole,
         AlarmCountRole,
         SelectedRole

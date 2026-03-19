@@ -1,4 +1,5 @@
 #include "l610_mqtt.h"
+#include "device_status.h"
 #include "protocol.h"
 #include "relay.h"
 #include "usart.h"
@@ -1373,6 +1374,42 @@ static L610_MQTT_Status_t MQTT_ParseIncomingCommandPayload(const char *payload, 
             return L610_MQTT_OK;
         }
 
+        if (strcmp(cmd_name, MQTT_CMD_PAD_OPEN) == 0)
+        {
+            MQTT_SafeCopy(request->request_cmd, sizeof(request->request_cmd), MQTT_CMD_PAD_OPEN);
+            MQTT_SafeCopy(request->protocol_cmd, sizeof(request->protocol_cmd), "PAD_OPEN");
+            request->has_value = 0U;
+            request->value = 0;
+            return L610_MQTT_OK;
+        }
+
+        if (strcmp(cmd_name, MQTT_CMD_PAD_CLOSE) == 0)
+        {
+            MQTT_SafeCopy(request->request_cmd, sizeof(request->request_cmd), MQTT_CMD_PAD_CLOSE);
+            MQTT_SafeCopy(request->protocol_cmd, sizeof(request->protocol_cmd), "PAD_CLOSE");
+            request->has_value = 0U;
+            request->value = 0;
+            return L610_MQTT_OK;
+        }
+
+        if (strcmp(cmd_name, MQTT_CMD_PAD_STOP) == 0)
+        {
+            MQTT_SafeCopy(request->request_cmd, sizeof(request->request_cmd), MQTT_CMD_PAD_STOP);
+            MQTT_SafeCopy(request->protocol_cmd, sizeof(request->protocol_cmd), "PAD_STOP");
+            request->has_value = 0U;
+            request->value = 0;
+            return L610_MQTT_OK;
+        }
+
+        if (strcmp(cmd_name, MQTT_CMD_QUERY_PAD_STATUS) == 0)
+        {
+            MQTT_SafeCopy(request->request_cmd, sizeof(request->request_cmd), MQTT_CMD_QUERY_PAD_STATUS);
+            MQTT_SafeCopy(request->protocol_cmd, sizeof(request->protocol_cmd), "QUERY_PAD_STATUS");
+            request->has_value = 0U;
+            request->value = 0;
+            return L610_MQTT_OK;
+        }
+
         if (MQTT_MapLegacyCommand(cmd_name, request) != 0)
         {
             return L610_MQTT_OK;
@@ -2477,61 +2514,59 @@ L610_MQTT_Status_t L610_MQTT_Publish(const char *topic, const char *payload)
 
 L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
 {
-    L610_Info_t info;
-    char raw_status[MQTT_STATUS_BUF_SIZE];
+    App_DeviceStatus_t status;
     char escaped_status[MQTT_JSON_BUF_SIZE];
     char timestamp[MQTT_TIMESTAMP_BUF_SIZE];
-    const char *r1;
-    const char *r2;
-    int net_ok;
-    uint8_t relay1_on;
-    uint8_t relay2_on;
 
     if (out_buf == NULL || buf_size == 0)
     {
         return L610_MQTT_INVALID_PARAM;
     }
 
-    Protocol_GetStatusString(raw_status, sizeof(raw_status));
-    MQTT_EscapeJson(raw_status, escaped_status, sizeof(escaped_status));
-
-    r1 = (Relay_GetState(RELAY1) == RELAY_ON) ? "ON" : "OFF";
-    r2 = (Relay_GetState(RELAY2) == RELAY_ON) ? "ON" : "OFF";
-    relay1_on = (Relay_GetState(RELAY1) == RELAY_ON) ? 1U : 0U;
-    relay2_on = (Relay_GetState(RELAY2) == RELAY_ON) ? 1U : 0U;
-    net_ok = (L610_GetCachedInfo(&info) == L610_OK) ? 1 : 0;
+    App_FillDeviceStatus(&status);
     MQTT_FormatTimestamp(timestamp, sizeof(timestamp));
+    MQTT_EscapeJson(status.state_text, escaped_status, sizeof(escaped_status));
 
-    if (net_ok)
-    {
-        snprintf(out_buf, buf_size,
-                 "{\"type\":\"status\",\"device_id\":\"%s\",\"online\":1,\"relay1\":%u,\"relay2\":%u,\"rssi\":%d,\"operator\":\"%s\",\"ip\":\"%s\",\"state\":\"%s\",\"relay1_text\":\"%s\",\"relay2_text\":\"%s\",\"tick\":%lu,\"timestamp\":\"%s\"}",
-                 mqtt_config.client_id,
-                 relay1_on,
-                 relay2_on,
-                 info.rssi,
-                 info.operator_name,
-                 info.ip_addr,
-                 escaped_status,
-                 r1,
-                 r2,
-                 (unsigned long)HAL_GetTick(),
-                 timestamp);
-    }
-    else
-    {
-        snprintf(out_buf, buf_size,
-                 "{\"type\":\"status\",\"device_id\":\"%s\",\"online\":%u,\"relay1\":%u,\"relay2\":%u,\"rssi\":0,\"operator\":\"\",\"ip\":\"\",\"state\":\"%s\",\"relay1_text\":\"%s\",\"relay2_text\":\"%s\",\"tick\":%lu,\"timestamp\":\"%s\"}",
-                 mqtt_config.client_id,
-                 (unsigned int)((L610_MQTT_IsConnected() != 0) ? 1U : 0U),
-                 relay1_on,
-                 relay2_on,
-                 escaped_status,
-                 r1,
-                 r2,
-                 (unsigned long)HAL_GetTick(),
-                 timestamp);
-    }
+    snprintf(out_buf, buf_size,
+             "{\"type\":\"status\",\"device_id\":\"%s\",\"online\":%u,\"relay1\":%u,\"relay2\":%u,"
+             "\"rssi\":%d,\"operator\":\"%s\",\"ip\":\"%s\",\"state\":\"%s\",\"tick\":%lu,"
+             "\"protocol_profile\":\"airport_pad_v1\",\"timestamp\":\"%s\","
+             "\"net\":{\"rssi\":%d,\"operator\":\"%s\",\"ip\":\"%s\"},"
+             "\"pad\":{\"left_state\":\"%s\",\"right_state\":\"%s\",\"ready\":%u,\"occupied\":%u,\"mode\":\"%s\"},"
+             "\"weather\":{\"wind_speed\":%.2f,\"wind_direction\":%.2f,\"temperature\":%.2f,\"humidity\":%.2f,"
+             "\"pressure\":%.2f,\"visibility\":%.2f,\"rain_detected\":%u,\"rain_value\":%.2f,"
+             "\"pm25\":%.2f,\"pm10\":%.2f,\"co2\":%.2f,\"tvoc\":%.4f,\"ch2o\":%.4f}}",
+             status.device_id,
+             (unsigned int)status.online,
+             (unsigned int)status.relay1,
+             (unsigned int)status.relay2,
+             status.net.rssi,
+             status.net.operator_name,
+             status.net.ip,
+             escaped_status,
+             (unsigned long)status.tick,
+             timestamp,
+             status.net.rssi,
+             status.net.operator_name,
+             status.net.ip,
+             status.pad.left_state,
+             status.pad.right_state,
+             (unsigned int)status.pad.ready,
+             (unsigned int)status.pad.occupied,
+             status.pad.mode,
+             (double)status.weather.wind_speed,
+             (double)status.weather.wind_direction,
+             (double)status.weather.temperature,
+             (double)status.weather.humidity,
+             (double)status.weather.pressure,
+             (double)status.weather.visibility,
+             (unsigned int)status.weather.rain_detected,
+             (double)status.weather.rain_value,
+             (double)status.weather.pm25,
+             (double)status.weather.pm10,
+             (double)status.weather.co2,
+             (double)status.weather.tvoc,
+             (double)status.weather.ch2o);
 
     return L610_MQTT_OK;
 }

@@ -5,6 +5,7 @@
 #include "l610.h"
 #include "l610_mqtt.h"
 #include "app_weather.h"
+#include "weather_data.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -51,6 +52,51 @@ static void App_PrintMQTTStage(const char *stage, L610_MQTT_Status_t status)
 
     snprintf(msg, sizeof(msg), "[APP] %s: %s\r\n", stage, L610_MQTT_GetStatusString(status));
     App_PrintText(msg);
+}
+
+void App_FillDeviceStatus(App_DeviceStatus_t *status)
+{
+    L610_Info_t info;
+
+    if (status == NULL)
+    {
+        return;
+    }
+
+    memset(status, 0, sizeof(*status));
+    strncpy(status->device_id, MQTT_CLIENT_ID, sizeof(status->device_id) - 1U);
+    status->online = (uint8_t)((L610_MQTT_IsConnected() != 0) ? 1U : 0U);
+    status->tick = HAL_GetTick();
+    status->relay1 = (uint8_t)((Relay_GetState(RELAY1) == RELAY_ON) ? 1U : 0U);
+    status->relay2 = (uint8_t)((Relay_GetState(RELAY2) == RELAY_ON) ? 1U : 0U);
+
+    strncpy(status->pad.left_state, status->relay1 ? "open" : "closed", sizeof(status->pad.left_state) - 1U);
+    strncpy(status->pad.right_state, status->relay2 ? "open" : "closed", sizeof(status->pad.right_state) - 1U);
+    status->pad.ready = 0U;
+    status->pad.occupied = 0U;
+    strncpy(status->pad.mode, "auto", sizeof(status->pad.mode) - 1U);
+
+    status->weather.wind_speed = g_weather_data.wind_speed_mps;
+    status->weather.wind_direction = g_weather_data.wind_dir_deg;
+    status->weather.temperature = g_weather_data.temperature_c;
+    status->weather.humidity = g_weather_data.humidity_rh;
+    status->weather.pressure = 0.0f;
+    status->weather.visibility = 0.0f;
+    status->weather.rain_detected = g_weather_data.rain_detected;
+    status->weather.rain_value = g_weather_data.rain_value;
+    status->weather.pm25 = g_weather_data.pm25_ugm3;
+    status->weather.pm10 = g_weather_data.pm10_ugm3;
+    status->weather.co2 = g_weather_data.co2_ppm;
+    status->weather.tvoc = g_weather_data.tvoc_mg_m3;
+    status->weather.ch2o = g_weather_data.ch2o_mg_m3;
+
+    strncpy(status->state_text, "running", sizeof(status->state_text) - 1U);
+    if (L610_GetCachedInfo(&info) == L610_OK)
+    {
+        status->net.rssi = info.rssi;
+        strncpy(status->net.operator_name, info.operator_name, sizeof(status->net.operator_name) - 1U);
+        strncpy(status->net.ip, info.ip_addr, sizeof(status->net.ip) - 1U);
+    }
 }
 
 static void App_MQTTBringUp(void)

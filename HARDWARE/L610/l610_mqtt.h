@@ -24,7 +24,11 @@
 #define MQTT_CMD_SET_R2          "set_r2"
 #define MQTT_CMD_SET_ALL         "set_all"
 #define MQTT_CMD_QUERY_STATUS    "query_status"
-#define MQTT_SUPPORTED_COMMANDS  "set_r1,set_r2,set_all,query_status"
+#define MQTT_CMD_PAD_OPEN        "pad_open"
+#define MQTT_CMD_PAD_CLOSE       "pad_close"
+#define MQTT_CMD_PAD_STOP        "pad_stop"
+#define MQTT_CMD_QUERY_PAD_STATUS "query_pad_status"
+#define MQTT_SUPPORTED_COMMANDS  "set_r1,set_r2,set_all,query_status,pad_open,pad_close,pad_stop,query_pad_status"
 #define MQTT_LEGACY_COMMANDS     "R1_ON,R1_OFF,R2_ON,R2_OFF,ALL_ON,ALL_OFF,STATUS"
 
 #define MQTT_FEATURE_VERBOSE_LOG          0U
@@ -33,7 +37,7 @@
 #define MQTT_KEEPALIVE_STATUS_INTERVAL_MS 20000U
 
 #define MQTT_CMD_BUF_SIZE        256
-#define MQTT_STATUS_BUF_SIZE     384
+#define MQTT_STATUS_BUF_SIZE     1024
 #define MQTT_AT_BUF_SIZE         512
 #define MQTT_HOST_BUF_SIZE       96
 #define MQTT_CLIENT_ID_BUF_SIZE  64
@@ -41,7 +45,7 @@
 #define MQTT_PASSWORD_BUF_SIZE   64
 #define MQTT_TOPIC_BUF_SIZE      128
 #define MQTT_PAYLOAD_BUF_SIZE    384
-#define MQTT_JSON_BUF_SIZE       512
+#define MQTT_JSON_BUF_SIZE       1024
 #define MQTT_TX_CMD_BUF_SIZE     1024
 
 typedef enum

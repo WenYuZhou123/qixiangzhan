@@ -1,6 +1,7 @@
 #ifndef APP_MAIN_H
 #define APP_MAIN_H
 
+#include "device_status.h"
 #include "l610_mqtt.h"
 #include "relay.h"
 
@@ -17,6 +18,7 @@ void App_MainInit(void);
 void App_MainTask(void);
 uint8_t App_MQTTIsReady(void);
 void App_GetRuntimeStatus(App_RuntimeStatus_t *status);
+void App_FillDeviceStatus(App_DeviceStatus_t *status);
 L610_MQTT_Status_t App_RequestStatusSync(void);
 
 #endif
