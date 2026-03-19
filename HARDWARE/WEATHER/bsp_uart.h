@@ -4,7 +4,6 @@
 #include "main.h"
 #include "uart_ringbuf.h"
 
-extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
 
@@ -17,7 +16,6 @@ typedef struct
 
 extern UartDev_t g_uart_wind;
 extern UartDev_t g_uart_air;
-extern UartDev_t g_uart_rain;
 
 void BSP_Uart_Init(void);
 void BSP_Uart_StartRecvIT(UartDev_t *dev);

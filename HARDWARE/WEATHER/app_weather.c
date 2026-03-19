@@ -5,9 +5,9 @@
 #include "sensor_rain.h"
 #include "stm32h7xx_hal.h"
 
-static uint32_t tick_wind = 0;
-static uint32_t tick_air  = 0;
-static uint32_t tick_rain = 0;
+static uint32_t tick_wind = 0U;
+static uint32_t tick_air  = 0U;
+static uint32_t tick_rain = 0U;
 
 void AppWeather_Init(void)
 {
@@ -21,24 +21,25 @@ void AppWeather_Task(void)
 {
     uint32_t now = HAL_GetTick();
 
-    if(now - tick_wind >= 1000)
+    if ((now - tick_wind) >= 1000U)
     {
         tick_wind = now;
         WindSensor_Poll();
     }
 
-    if(now - tick_air >= 1000)
+    if ((now - tick_air) >= 200U)
     {
         tick_air = now;
         AirSensor_Poll();
     }
 
-    if(now - tick_rain >= 1000)
+    if ((now - tick_rain) >= 50U)
     {
         tick_rain = now;
         RainSensor_Poll();
     }
 
+    WindSensor_Parse();
     AirSensor_Parse();
     RainSensor_Parse();
 }

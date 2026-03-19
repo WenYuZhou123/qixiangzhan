@@ -10,6 +10,7 @@ typedef struct
     float humidity_rh;
     float co2_ppm;
     float pm25_ugm3;
+    float pm10_ugm3;
     float tvoc_mg_m3;
     float ch2o_mg_m3;
 } AirSensor_t;

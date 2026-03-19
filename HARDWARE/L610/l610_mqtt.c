@@ -106,7 +106,11 @@ static void MQTT_DebugPrint(const char *str)
 {
     if (str != NULL)
     {
+#if MQTT_FEATURE_VERBOSE_LOG
         HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 1000);
+#else
+        (void)str;
+#endif
     }
 }
 
@@ -2768,6 +2772,7 @@ L610_MQTT_Status_t L610_MQTT_ProcessLine(const char *line)
 {
     char topic[MQTT_TOPIC_BUF_SIZE];
     char payload[MQTT_PAYLOAD_BUF_SIZE];
+    char command[MQTT_CMD_BUF_SIZE];
     char *p;
     char *endptr;
     long client_id;

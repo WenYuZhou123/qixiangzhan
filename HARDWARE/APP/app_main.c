@@ -3,8 +3,8 @@
 #include "usart.h"
 #include "relay.h"
 #include "l610.h"
-#include "console.h"
 #include "l610_mqtt.h"
+#include "app_weather.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -15,10 +15,7 @@ static uint32_t app_mqtt_last_retry_tick = 0U;
 
 static void App_PrintText(const char *text)
 {
-    if (text != NULL)
-    {
-        HAL_UART_Transmit(&huart2, (uint8_t *)text, strlen(text), 1000);
-    }
+    (void)text;
 }
 
 static const char *App_GetL610StatusText(L610_Status_t status)
@@ -42,19 +39,10 @@ static void App_PrintDiagBanner(L610_Status_t sync_status)
     App_PrintText("\r\nL610 diagnostic mode ready\r\n");
     snprintf(msg, sizeof(msg), "Modem sync: %s\r\n", App_GetL610StatusText(sync_status));
     App_PrintText(msg);
-    App_PrintText("Commands: ATRAW, SELFTEST, NETINIT, MQTTINIT, MQTTCLOSE, STATUS\r\n");
     App_PrintText("MQTT auto reconnect is enabled\r\n");
     L610_MQTT_GetConfig(&mqtt_config);
     snprintf(msg, sizeof(msg), "CMD: %s\r\n", mqtt_config.topic_cmd);
     App_PrintText(msg);
-    snprintf(msg, sizeof(msg), "STATUS: %s\r\n", mqtt_config.topic_status);
-    App_PrintText(msg);
-    snprintf(msg, sizeof(msg), "ACK: %s\r\n", mqtt_config.topic_ack);
-    App_PrintText(msg);
-    snprintf(msg, sizeof(msg), "ONLINE: %s\r\n", mqtt_config.topic_online);
-    App_PrintText(msg);
-    App_PrintText("MQTT commands: " MQTT_SUPPORTED_COMMANDS "\r\n");
-    App_PrintText("Legacy commands: " MQTT_LEGACY_COMMANDS "\r\n");
 }
 
 static void App_PrintMQTTStage(const char *stage, L610_MQTT_Status_t status)
@@ -106,7 +94,8 @@ void App_MainInit(void)
     Relay_Init();
     L610_Init();
     L610_MQTT_Init();
-    HAL_Delay(3000);  /* Wait for the modem to boot. */
+    AppWeather_Init();
+    HAL_Delay(3000);
     l610_sync_status = L610_Sync(1);
     App_PrintDiagBanner(l610_sync_status);
     app_mqtt_last_retry_tick = 0U;
@@ -114,8 +103,8 @@ void App_MainInit(void)
 
 void App_MainTask(void)
 {
-    Console_Task();
     L610_MQTT_Task();
+    AppWeather_Task();
 
     if (L610_MQTT_GetState() >= MQTT_STATE_SUBSCRIBED)
     {
