@@ -14,7 +14,6 @@ typedef struct
     uint8_t rx_byte;
 } UartDev_t;
 
-extern UartDev_t g_uart_wind;
 extern UartDev_t g_uart_air;
 
 void BSP_Uart_Init(void);

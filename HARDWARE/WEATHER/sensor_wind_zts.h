@@ -6,8 +6,8 @@
 typedef struct
 {
     SensorBase_t base;
-    uint8_t slave_addr_speed;
-    uint8_t slave_addr_dir;
+    uint16_t speed_raw_adc;
+    uint16_t direction_raw_adc;
     float wind_speed_mps;
     float wind_dir_deg;
 } WindSensor_t;
