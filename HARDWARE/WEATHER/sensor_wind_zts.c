@@ -3,6 +3,7 @@
 #include "weather_data.h"
 #include "stm32h7xx_hal.h"
 #include "stm32h7xx_hal_adc.h"
+#include <string.h>
 
 /*
  * Current implementation assumes the wind-speed / wind-direction signal has already
@@ -19,8 +20,35 @@
 #define WIND_ADC_REF_VOLTAGE           3.3f
 #define WIND_SENSOR_OUTPUT_MAX_VOLTAGE 2.0f
 #define WIND_SPEED_FULL_SCALE_MPS      30.0f
+#define WIND_SENSOR_MIN_VALID_VOLTAGE  0.02f
+#define WIND_SENSOR_MAX_VALID_VOLTAGE  2.20f
+#define WIND_SENSOR_STUCK_DELTA        4U
+#define WIND_SENSOR_STUCK_LIMIT        8U
 
 WindSensor_t g_wind_sensor = {0};
+static uint16_t s_prev_speed_raw = 0U;
+static uint16_t s_prev_direction_raw = 0U;
+static uint8_t s_stuck_count = 0U;
+
+static void WindSensor_SetInvalid(const char *reason)
+{
+    g_wind_sensor.valid = 0U;
+    g_wind_sensor.wind_speed_mps = 0.0f;
+    g_wind_sensor.wind_dir_deg = 0.0f;
+    g_weather_data.wind_speed_mps = 0.0f;
+    g_weather_data.wind_dir_deg = 0.0f;
+    g_weather_data.wind_online = 0U;
+
+    if (reason != NULL)
+    {
+        strncpy(g_wind_sensor.invalid_reason, reason, sizeof(g_wind_sensor.invalid_reason) - 1U);
+        g_wind_sensor.invalid_reason[sizeof(g_wind_sensor.invalid_reason) - 1U] = '\0';
+    }
+    else
+    {
+        strcpy(g_wind_sensor.invalid_reason, "invalid");
+    }
+}
 
 static uint16_t WindSensor_ReadAdcChannel(uint32_t channel)
 {
@@ -98,6 +126,12 @@ void WindSensor_Init(void)
     g_wind_sensor.direction_raw_adc = 0U;
     g_wind_sensor.wind_speed_mps = 0.0f;
     g_wind_sensor.wind_dir_deg = 0.0f;
+    g_wind_sensor.valid = 0U;
+    strcpy(g_wind_sensor.invalid_reason, "no_signal");
+    s_prev_speed_raw = 0U;
+    s_prev_direction_raw = 0U;
+    s_stuck_count = 0U;
+    g_weather_data.wind_online = 0U;
 }
 
 void WindSensor_Poll(void)
@@ -106,25 +140,67 @@ void WindSensor_Poll(void)
     const uint16_t direction_raw = WindSensor_ReadAdcChannel(WIND_DIRECTION_ADC_CHANNEL);
     const float speed_voltage = WindSensor_AdcToVoltage(speed_raw);
     const float direction_voltage = WindSensor_AdcToVoltage(direction_raw);
+    const uint16_t speed_delta = (speed_raw >= s_prev_speed_raw) ? (uint16_t)(speed_raw - s_prev_speed_raw) : (uint16_t)(s_prev_speed_raw - speed_raw);
+    const uint16_t direction_delta = (direction_raw >= s_prev_direction_raw) ? (uint16_t)(direction_raw - s_prev_direction_raw) : (uint16_t)(s_prev_direction_raw - direction_raw);
 
     g_wind_sensor.speed_raw_adc = speed_raw;
     g_wind_sensor.direction_raw_adc = direction_raw;
-    g_wind_sensor.wind_speed_mps = (speed_voltage / WIND_SENSOR_OUTPUT_MAX_VOLTAGE) * WIND_SPEED_FULL_SCALE_MPS;
-    if (g_wind_sensor.wind_speed_mps < 0.0f)
+
+    if ((speed_raw == 0U && direction_raw == 0U) ||
+        (speed_raw == 0xFFFFU) ||
+        (direction_raw == 0xFFFFU))
     {
-        g_wind_sensor.wind_speed_mps = 0.0f;
+        WindSensor_SetInvalid("no_frontend");
     }
-    if (g_wind_sensor.wind_speed_mps > WIND_SPEED_FULL_SCALE_MPS)
+    else if ((speed_voltage < WIND_SENSOR_MIN_VALID_VOLTAGE) ||
+             (direction_voltage < WIND_SENSOR_MIN_VALID_VOLTAGE) ||
+             (speed_voltage > WIND_SENSOR_MAX_VALID_VOLTAGE) ||
+             (direction_voltage > WIND_SENSOR_MAX_VALID_VOLTAGE))
     {
-        g_wind_sensor.wind_speed_mps = WIND_SPEED_FULL_SCALE_MPS;
+        WindSensor_SetInvalid("out_of_range");
+    }
+    else
+    {
+        if ((speed_delta <= WIND_SENSOR_STUCK_DELTA) && (direction_delta <= WIND_SENSOR_STUCK_DELTA))
+        {
+            if (s_stuck_count < 0xFFU)
+            {
+                s_stuck_count++;
+            }
+        }
+        else
+        {
+            s_stuck_count = 0U;
+        }
+
+        if (s_stuck_count >= WIND_SENSOR_STUCK_LIMIT)
+        {
+            WindSensor_SetInvalid("stuck_signal");
+        }
+        else
+        {
+            g_wind_sensor.valid = 1U;
+            strcpy(g_wind_sensor.invalid_reason, "ok");
+            g_wind_sensor.wind_speed_mps = (speed_voltage / WIND_SENSOR_OUTPUT_MAX_VOLTAGE) * WIND_SPEED_FULL_SCALE_MPS;
+            if (g_wind_sensor.wind_speed_mps < 0.0f)
+            {
+                g_wind_sensor.wind_speed_mps = 0.0f;
+            }
+            if (g_wind_sensor.wind_speed_mps > WIND_SPEED_FULL_SCALE_MPS)
+            {
+                g_wind_sensor.wind_speed_mps = WIND_SPEED_FULL_SCALE_MPS;
+            }
+
+            g_wind_sensor.wind_dir_deg = WindSensor_DecodeDirection(direction_voltage);
+            g_weather_data.wind_speed_mps = g_wind_sensor.wind_speed_mps;
+            g_weather_data.wind_dir_deg = g_wind_sensor.wind_dir_deg;
+            g_weather_data.wind_online = 1U;
+        }
     }
 
-    g_wind_sensor.wind_dir_deg = WindSensor_DecodeDirection(direction_voltage);
-
-    g_weather_data.wind_speed_mps = g_wind_sensor.wind_speed_mps;
-    g_weather_data.wind_dir_deg = g_wind_sensor.wind_dir_deg;
-    g_weather_data.wind_online = 1U;
-    g_wind_sensor.base.online = 1U;
+    s_prev_speed_raw = speed_raw;
+    s_prev_direction_raw = direction_raw;
+    g_wind_sensor.base.online = g_wind_sensor.valid;
     g_wind_sensor.base.last_update_tick = HAL_GetTick();
 }
 

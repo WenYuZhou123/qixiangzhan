@@ -35,6 +35,8 @@ typedef struct
     uint8_t cj702_online;
     uint8_t wind_online;
     uint8_t rain_online;
+    uint8_t wind_valid;
+    char wind_invalid_reason[APP_STATUS_FIELD_LEN];
 } App_WeatherStatus_t;
 
 typedef struct
@@ -57,9 +59,21 @@ typedef struct
     uint32_t alarm_count;
     uint8_t last_status_publish_ok;
     uint32_t last_status_publish_tick;
+    uint32_t lcd_refresh_tick;
+    uint32_t lcd_refresh_count;
+    uint8_t l610_at_ready;
+    uint8_t l610_sim_ready;
+    uint8_t l610_creg;
+    uint8_t l610_cgreg;
+    uint8_t l610_cgatt;
+    int l610_ber;
+    uint32_t l610_timeout_count;
+    char l610_last_cmd[APP_STATUS_FIELD_LEN];
+    char l610_mqtt_stage[APP_STATUS_FIELD_LEN];
     char state_text[APP_STATUS_TEXT_LEN];
     char last_error_text[APP_STATUS_TEXT_LEN];
     char last_cj702_frame_hex[APP_STATUS_TEXT_LEN];
+    char l610_last_resp[APP_STATUS_TEXT_LEN];
 } App_DeviceStatus_t;
 
 void App_FillDeviceStatus(App_DeviceStatus_t *status);

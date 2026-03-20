@@ -10,6 +10,8 @@ typedef struct
     uint16_t direction_raw_adc;
     float wind_speed_mps;
     float wind_dir_deg;
+    uint8_t valid;
+    char invalid_reason[32];
 } WindSensor_t;
 
 extern WindSensor_t g_wind_sensor;

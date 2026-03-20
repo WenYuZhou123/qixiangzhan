@@ -127,6 +127,10 @@ static void render_weather(const LCD_UI_Model_t *model)
     draw_card(16, 292, 380, 92, "GAS", line, LCD_PORT_COLOR_ACCENT);
     snprintf(line, sizeof(line), "ADC %u / %u", (unsigned)s->weather.wind_adc_raw, (unsigned)s->weather.direction_adc_raw);
     draw_card(408, 292, 376, 92, "RAW ADC", line, LCD_PORT_COLOR_WARN);
+    snprintf(line, sizeof(line), "WIND %s %s",
+             (s->weather.wind_valid != 0U) ? "VALID" : "INVALID",
+             s->weather.wind_invalid_reason);
+    LCD_Port_DrawText(18, 400, line, (s->weather.wind_valid != 0U) ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_DANGER, 0U);
 }
 
 static void render_debug(const LCD_UI_Model_t *model)
@@ -135,12 +139,30 @@ static void render_debug(const LCD_UI_Model_t *model)
     const App_DeviceStatus_t *s = &model->status;
 
     draw_header("DEBUG", LCD_PAGE_DEBUG);
-    snprintf(line, sizeof(line), "PUBLISH OK %u  TICK %lu", (unsigned)s->last_status_publish_ok, (unsigned long)s->last_status_publish_tick);
-    draw_card(16, 76, 380, 100, "MQTT", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "AIR %u  WIND %u  RAIN %u", (unsigned)s->weather.cj702_online, (unsigned)s->weather.wind_online, (unsigned)s->weather.rain_online);
-    draw_card(408, 76, 376, 100, "SENSOR ONLINE", line, LCD_PORT_COLOR_ACCENT);
-    draw_card(16, 190, 768, 88, "LAST CJ702 FRAME", s->last_cj702_frame_hex[0] ? s->last_cj702_frame_hex : "N/A", LCD_PORT_COLOR_WARN);
-    draw_card(16, 292, 768, 88, "LAST ERROR", s->last_error_text[0] ? s->last_error_text : "NONE", LCD_PORT_COLOR_DANGER);
+    snprintf(line, sizeof(line), "REF %lu  TICK %lu",
+             (unsigned long)s->lcd_refresh_count,
+             (unsigned long)s->lcd_refresh_tick);
+    draw_card(16, 76, 240, 88, "LCD", line, LCD_PORT_COLOR_ACCENT);
+
+    snprintf(line, sizeof(line), "MQTT %s", s->l610_mqtt_stage);
+    draw_card(272, 76, 240, 88, "MQTT STATE", line, LCD_PORT_COLOR_ACCENT);
+
+    snprintf(line, sizeof(line), "AT %u SIM %u CREG %u ATT %u",
+             (unsigned)s->l610_at_ready,
+             (unsigned)s->l610_sim_ready,
+             (unsigned)s->l610_creg,
+             (unsigned)s->l610_cgatt);
+    draw_card(528, 76, 256, 88, "L610", line, LCD_PORT_COLOR_WARN);
+
+    draw_card(16, 178, 380, 88, "LAST CMD", s->l610_last_cmd[0] ? s->l610_last_cmd : "N/A", LCD_PORT_COLOR_ACCENT);
+
+    snprintf(line, sizeof(line), "WIND %s %s",
+             (s->weather.wind_valid != 0U) ? "VALID" : "INVALID",
+             s->weather.wind_invalid_reason);
+    draw_card(408, 178, 376, 88, "WIND CHECK", line, (s->weather.wind_valid != 0U) ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_DANGER);
+
+    draw_card(16, 280, 768, 72, "LAST RESP", s->l610_last_resp[0] ? s->l610_last_resp : "N/A", LCD_PORT_COLOR_WARN);
+    LCD_Port_DrawText(18, 370, s->last_error_text[0] ? s->last_error_text : "NONE", LCD_PORT_COLOR_DANGER, 0U);
 }
 
 void LCD_UI_RenderPage(LCD_Page_t page, const LCD_UI_Model_t *model)
