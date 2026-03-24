@@ -133,7 +133,8 @@ ScrollView {
                         title: "风速"
                         value: Number(store.windSpeed).toFixed(1)
                         unit: "m/s"
-                        note: "风向 " + Number(store.windDirection).toFixed(0) + "°"
+                        note: (store.windDirectionText.length > 0 ? store.windDirectionText + "  " : "")
+                              + Number(store.windDirection).toFixed(0) + "°"
                     }
                     StatCard {
                         title: "温度"
@@ -156,9 +157,9 @@ ScrollView {
 
                     StatCard {
                         title: "雨滴"
-                        value: store.rainDetected ? "有雨" : "无雨"
+                        value: store.rainLevelText.length > 0 ? store.rainLevelText : (store.rainDetected ? "有雨" : "无雨")
                         unit: ""
-                        note: "雨量值 " + Number(store.rainValue).toFixed(1)
+                        note: "湿润度 " + Number(store.rainValue).toFixed(0) + "%  ADC " + store.rainAdcRaw
                     }
 
                     StatCard {
@@ -241,11 +242,13 @@ ScrollView {
                             Label { text: "风速"; color: theme.textMuted; font.pixelSize: 12 }
                             Label { text: Number(store.windSpeed).toFixed(1) + " m/s"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "风向"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: Number(store.windDirection).toFixed(0) + "°"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: (store.windDirectionText.length > 0 ? store.windDirectionText + "  " : "") + Number(store.windDirection).toFixed(0) + "°"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "能见度"; color: theme.textMuted; font.pixelSize: 12 }
                             Label { text: Number(store.visibility).toFixed(1) + " km"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "雨滴"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: store.rainDetected ? "检测到" : "未检测到"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: store.rainLevelText.length > 0 ? store.rainLevelText : (store.rainDetected ? "检测到" : "未检测到"); color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "RAW ADC"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: "W " + store.windSpeedRaw + " / D " + store.windDirectionRaw + " / R " + store.rainAdcRaw; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "PM2.5"; color: theme.textMuted; font.pixelSize: 12 }
                             Label { text: Number(store.pm25).toFixed(0) + " ug/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "PM10"; color: theme.textMuted; font.pixelSize: 12 }

@@ -31,8 +31,8 @@
 #define MQTT_SUPPORTED_COMMANDS  "set_r1,set_r2,set_all,query_status,pad_open,pad_close,pad_stop,query_pad_status"
 #define MQTT_LEGACY_COMMANDS     "R1_ON,R1_OFF,R2_ON,R2_OFF,ALL_ON,ALL_OFF,STATUS"
 
-#define MQTT_FEATURE_VERBOSE_LOG          0U
-#define MQTT_FEATURE_DEBUG_WILDCARD_SUB   1U
+#define MQTT_FEATURE_VERBOSE_LOG          1U
+#define MQTT_FEATURE_DEBUG_WILDCARD_SUB   0U
 #define MQTT_FEATURE_KEEPALIVE_STATUS     1U
 #define MQTT_KEEPALIVE_STATUS_INTERVAL_MS 20000U
 
@@ -135,9 +135,12 @@ const char *L610_MQTT_GetStatusString(L610_MQTT_Status_t status);
 int L610_MQTT_IsConnected(void);
 int L610_MQTT_IsReady(void);
 int L610_MQTT_GetLastResultCode(void);
+const char *L610_MQTT_GetLastTx(void);
+const char *L610_MQTT_GetLastRx(void);
 const char *L610_MQTT_GetLastLine(void);
 uint8_t L610_MQTT_GetLastStatusPublishOk(void);
 uint32_t L610_MQTT_GetLastStatusPublishTick(void);
+const char *L610_MQTT_GetLastStageDetail(void);
 
 L610_MQTT_Status_t L610_MQTT_SetAPN(const char *apn);
 L610_MQTT_Status_t L610_MQTT_RequestIP(void);

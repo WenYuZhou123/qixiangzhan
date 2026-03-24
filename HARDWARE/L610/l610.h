@@ -5,9 +5,10 @@
 #include "usart.h"
 #include <stdint.h>
 
-#define L610_RX_BUF_SIZE       1024
+#define L610_RX_BUF_SIZE       8192
 #define L610_OPERATOR_NAME_LEN   32
 #define L610_IP_ADDR_LEN         32
+#define L610_DEBUG_ENABLE         1U
 
 typedef enum
 {
@@ -15,6 +16,21 @@ typedef enum
     L610_ERROR,
     L610_TIMEOUT
 } L610_Status_t;
+
+typedef enum
+{
+    L610_OWNER_NONE = 0,
+    L610_OWNER_DIAG,
+    L610_OWNER_MQTT,
+    L610_OWNER_PROTOCOL
+} L610_Owner_t;
+
+typedef enum
+{
+    L610_SESSION_OK = 0,
+    L610_SESSION_BUSY,
+    L610_SESSION_INVALID
+} L610_SessionStatus_t;
 
 typedef struct
 {
@@ -32,6 +48,10 @@ typedef struct
 void L610_Init(void);
 void L610_ClearBuffer(void);
 void L610_FlushRx(void);
+L610_SessionStatus_t L610_BeginSession(L610_Owner_t owner);
+void L610_EndSession(L610_Owner_t owner);
+L610_Owner_t L610_GetOwner(void);
+const char *L610_GetOwnerString(void);
 L610_Status_t L610_Sync(uint8_t disable_echo);
 void L610_SendCmd(const char *cmd);
 L610_Status_t L610_ReadResponse(uint32_t timeout);
@@ -41,6 +61,7 @@ L610_Status_t L610_SendRawCommand(const char *cmd, uint32_t timeout, uint32_t id
 char* L610_GetBuffer(void);
 
 L610_Status_t L610_SetEchoOff(void);
+L610_Status_t L610_SetVerboseError(uint8_t mode);
 L610_Status_t L610_TestAT(void);
 L610_Status_t L610_CheckSIM(void);
 L610_Status_t L610_GetCSQ(int *rssi, int *ber);

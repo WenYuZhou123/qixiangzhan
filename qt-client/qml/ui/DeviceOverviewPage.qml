@@ -436,7 +436,7 @@ Item {
                     MetricCard {
                         title: "雨滴"
                         value: store.rainDetected ? "检测到" : "未检测到"
-                        caption: "雨量值 " + Number(store.rainValue).toFixed(1)
+                        caption: "湿润度 " + Number(store.rainValue).toFixed(0) + "%"
                     }
                 }
 

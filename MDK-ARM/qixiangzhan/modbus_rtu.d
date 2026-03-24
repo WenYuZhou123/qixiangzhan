@@ -28,9 +28,14 @@ qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma_
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_mdma.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_exti.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_cortex.h
+qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc.h
+qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_adc.h
+qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc_ex.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash_ex.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_hsem.h
+qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_sram.h
+qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_fmc.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c_ex.h
 qixiangzhan\modbus_rtu.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr.h

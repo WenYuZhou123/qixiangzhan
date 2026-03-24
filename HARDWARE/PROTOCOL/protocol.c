@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define PROTOCOL_RESPONSE_BUF_SIZE 1024
+#define PROTOCOL_RESPONSE_BUF_SIZE 8192
 #define PROTOCOL_ATRAW_TIMEOUT_MS  5000
 #define PROTOCOL_ATRAW_IDLE_MS      300
 
@@ -68,10 +68,18 @@ static void Protocol_SetSummaryResponse(const char *summary)
 static void Protocol_SetMQTTResponse(const char *label, L610_MQTT_Status_t status)
 {
     snprintf(protocol_response_buf, sizeof(protocol_response_buf),
-             "%s=%s\r\nSTATE=%s",
+             "%s=%s\r\nSTATE=%s\r\nDETAIL=%s",
              label,
              L610_MQTT_GetStatusString(status),
-             L610_MQTT_GetStateString());
+             L610_MQTT_GetStateString(),
+             L610_MQTT_GetLastStageDetail());
+}
+
+static ProtocolStatus_t Protocol_SetBusyResponse(void)
+{
+    snprintf(protocol_response_buf, sizeof(protocol_response_buf), "L610 busy: %s", L610_GetOwnerString());
+    Protocol_SetStatusText("BUSY");
+    return PROTOCOL_EXEC_ERROR;
 }
 
 static ProtocolStatus_t Protocol_HandleATRaw(char *cmd)
@@ -82,6 +90,7 @@ static ProtocolStatus_t Protocol_HandleATRaw(char *cmd)
     uint8_t timeout_explicit;
     char at_cmd[256];
     L610_Status_t l610_status;
+    L610_SessionStatus_t session_status;
 
     payload = cmd + 5;
     while (*payload == ' ')
@@ -144,6 +153,12 @@ static ProtocolStatus_t Protocol_HandleATRaw(char *cmd)
         }
     }
 
+    session_status = L610_BeginSession(L610_OWNER_PROTOCOL);
+    if (session_status != L610_SESSION_OK)
+    {
+        return Protocol_SetBusyResponse();
+    }
+
     l610_status = L610_SendRawCommand(at_cmd, (uint32_t)timeout_ms, PROTOCOL_ATRAW_IDLE_MS);
     if (l610_status == L610_OK)
     {
@@ -171,16 +186,25 @@ static ProtocolStatus_t Protocol_HandleATRaw(char *cmd)
         Protocol_SetResponse("NO RESPONSE");
     }
 
+    L610_EndSession(L610_OWNER_PROTOCOL);
     return (l610_status == L610_OK) ? PROTOCOL_OK : PROTOCOL_EXEC_ERROR;
 }
 
 static ProtocolStatus_t Protocol_HandleSelfTest(void)
 {
     L610_Status_t status;
+    L610_SessionStatus_t session_status;
+
+    session_status = L610_BeginSession(L610_OWNER_PROTOCOL);
+    if (session_status != L610_SESSION_OK)
+    {
+        return Protocol_SetBusyResponse();
+    }
 
     status = L610_SelfTest();
     Protocol_SetStatusText((status == L610_OK) ? "OK" : "ERROR");
     Protocol_SetSummaryResponse((status == L610_OK) ? "SELFTEST=OK" : "SELFTEST=ERROR");
+    L610_EndSession(L610_OWNER_PROTOCOL);
     return (status == L610_OK) ? PROTOCOL_OK : PROTOCOL_EXEC_ERROR;
 }
 

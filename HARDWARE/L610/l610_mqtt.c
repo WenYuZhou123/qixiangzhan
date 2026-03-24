@@ -94,6 +94,8 @@ static uint8_t mqtt_recent_msg_index = 0U;
 
 static L610_MQTT_Status_t MQTT_WaitForKeywordOrOk(const char *keyword, uint32_t timeout_ms);
 static int MQTT_FindKnownCommandToken(const char *text, char *cmd_out, uint16_t cmd_size);
+static int MQTT_MIPCALLIsStaleActive(const char *line);
+static L610_MQTT_Status_t MQTT_ResetIPSession(void);
 
 static uint8_t MQTT_IsLongPublishCommand(const char *cmd)
 {
@@ -110,7 +112,7 @@ static void MQTT_DebugPrint(const char *str)
     if (str != NULL)
     {
 #if MQTT_FEATURE_VERBOSE_LOG
-        HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 1000);
+        HAL_UART_Transmit(&huart6, (uint8_t *)str, strlen(str), 1000);
 #else
         (void)str;
 #endif
@@ -251,6 +253,16 @@ static int MQTT_MIPCALLHasValidIP(const char *line)
     }
 
     return strchr(ip, '.') != NULL;
+}
+
+static int MQTT_MIPCALLIsStaleActive(const char *line)
+{
+    if (line == NULL)
+    {
+        return 0;
+    }
+
+    return (strstr(line, "+MIPCALL: 1") != NULL && strstr(line, "0.0.0.0") != NULL) ? 1 : 0;
 }
 
 static void MQTT_SetLastLine(const char *line)
@@ -1828,6 +1840,22 @@ static L610_MQTT_Status_t MQTT_CheckIPAlreadyReady(void)
     return L610_MQTT_NO_DATA;
 }
 
+static L610_MQTT_Status_t MQTT_ResetIPSession(void)
+{
+    L610_MQTT_Status_t status;
+
+    MQTT_DebugPrint("[MQTT] Reset stale MIPCALL...\r\n");
+    MQTT_LogTx("AT+MIPCALL=0");
+    L610_SendCmd("AT+MIPCALL=0\r\n");
+    status = MQTT_WaitForKeywordOrOk("+MIPCALL:", 15000);
+    if (status != L610_MQTT_OK)
+    {
+        MQTT_DebugPrint("[MQTT] Reset stale MIPCALL incomplete\r\n");
+    }
+
+    return status;
+}
+
 static void MQTT_StoreMessage(int client_id, int qos, const char *topic, const char *payload, const char *raw_line)
 {
     mqtt_last_message.client_id = client_id;
@@ -1887,7 +1915,7 @@ void L610_MQTT_LoadDefaultConfig(L610_MQTT_Config_t *config)
     config->keepalive_sec = 60;
     config->clean_session = 1;
     config->use_tls = 1;
-    config->default_qos = 1;
+    config->default_qos = 0;
     config->auto_publish_status = 1;
     config->auto_publish_ack = 1;
 }
@@ -2076,6 +2104,21 @@ int L610_MQTT_GetLastResultCode(void)
     return mqtt_last_result_code;
 }
 
+const char *L610_MQTT_GetLastTx(void)
+{
+    return mqtt_last_tx;
+}
+
+const char *L610_MQTT_GetLastRx(void)
+{
+    return mqtt_last_rx;
+}
+
+const char *L610_MQTT_GetLastStageDetail(void)
+{
+    return "";
+}
+
 const char *L610_MQTT_GetLastLine(void)
 {
     return mqtt_last_line;
@@ -2125,6 +2168,15 @@ L610_MQTT_Status_t L610_MQTT_RequestIP(void)
     {
         MQTT_DebugPrint("[MQTT] IP already ready\r\n");
         return L610_MQTT_OK;
+    }
+
+    if (MQTT_MIPCALLIsStaleActive(L610_GetBuffer()) != 0)
+    {
+        ret = MQTT_ResetIPSession();
+        if (ret == L610_MQTT_TIMEOUT)
+        {
+            MQTT_LogFailureContext("[MQTT] MIPCALL reset timeout");
+        }
     }
 
     for (i = 0; i < (sizeof(cmd_templates) / sizeof(cmd_templates[0])); i++)

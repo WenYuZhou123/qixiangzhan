@@ -6,6 +6,7 @@
 #include "lcd_touch.h"
 #include "lcd_ui_model.h"
 #include "lcd_ui_pages.h"
+#include "usart.h"
 #include <string.h>
 
 static LCD_Page_t s_page = LCD_PAGE_OVERVIEW;
@@ -13,15 +14,21 @@ static LCD_UI_Model_t s_model;
 static uint32_t s_last_refresh_tick = 0U;
 static uint32_t s_last_render_tick = 0U;
 static uint32_t s_refresh_count = 0U;
-static uint8_t s_touch_active = 0U;
-static uint8_t s_touch_tab_handled = 0U;
-static uint16_t s_touch_start_x = 0U;
-static uint16_t s_touch_start_y = 0U;
-static uint16_t s_touch_last_x = 0U;
-static uint16_t s_touch_last_y = 0U;
 static uint8_t s_force_render = 1U;
 static uint8_t s_has_last_status = 0U;
+static App_DeviceStatus_t s_work_status;
 static App_DeviceStatus_t s_last_status;
+static uint8_t s_touch_active = 0U;
+static uint16_t s_touch_start_x = 0U;
+static uint16_t s_touch_start_y = 0U;
+
+#define LCD_TOUCH_SWIPE_THRESHOLD     60U
+#define LCD_TOUCH_TAP_THRESHOLD       20U
+
+static void lcd_diag_print(const char *text)
+{
+    (void)text;
+}
 
 static uint16_t lcd_abs_diff_u16(uint16_t a, uint16_t b)
 {
@@ -44,6 +51,99 @@ static uint8_t lcd_text_changed(const char *a, const char *b)
     return (uint8_t)((strcmp(a, b) != 0) ? 1U : 0U);
 }
 
+static uint16_t lcd_abs_diff_u16_simple(uint16_t a, uint16_t b)
+{
+    return (a >= b) ? (uint16_t)(a - b) : (uint16_t)(b - a);
+}
+
+static void lcd_change_page_relative(int8_t delta)
+{
+    int16_t next_page;
+
+    next_page = (int16_t)s_page + delta;
+    if (next_page < 0)
+    {
+        next_page = (int16_t)LCD_PAGE_COUNT - 1;
+    }
+    else if (next_page >= (int16_t)LCD_PAGE_COUNT)
+    {
+        next_page = 0;
+    }
+
+    s_page = (LCD_Page_t)next_page;
+    s_force_render = 1U;
+}
+
+static uint8_t lcd_try_select_page_tab(uint16_t x, uint16_t y)
+{
+    uint16_t tab_x;
+    uint8_t index;
+
+    if (y < LCD_UI_TAB_Y || y >= (uint16_t)(LCD_UI_TAB_Y + LCD_UI_TAB_H))
+    {
+        return 0U;
+    }
+
+    tab_x = LCD_UI_TAB_X;
+    for (index = 0U; index < LCD_PAGE_COUNT; index++)
+    {
+        if (x >= tab_x && x < (uint16_t)(tab_x + LCD_UI_TAB_W))
+        {
+            s_page = (LCD_Page_t)index;
+            s_force_render = 1U;
+            return 1U;
+        }
+        tab_x = (uint16_t)(tab_x + LCD_UI_TAB_W + LCD_UI_TAB_GAP);
+    }
+
+    return 0U;
+}
+
+static void lcd_handle_touch_navigation(void)
+{
+    LCD_TouchState_t touch_state;
+    uint16_t dx;
+    uint16_t dy;
+
+    if (LCD_Touch_Read(&touch_state) != 0U && touch_state.pressed != 0U)
+    {
+        if (s_touch_active == 0U)
+        {
+            s_touch_active = 1U;
+            s_touch_start_x = touch_state.x;
+            s_touch_start_y = touch_state.y;
+        }
+        return;
+    }
+
+    if (s_touch_active == 0U)
+    {
+        return;
+    }
+
+    dx = lcd_abs_diff_u16_simple(s_touch_start_x, touch_state.x);
+    dy = lcd_abs_diff_u16_simple(s_touch_start_y, touch_state.y);
+    s_touch_active = 0U;
+
+    if (dx <= LCD_TOUCH_TAP_THRESHOLD && dy <= LCD_TOUCH_TAP_THRESHOLD)
+    {
+        (void)lcd_try_select_page_tab(s_touch_start_x, s_touch_start_y);
+        return;
+    }
+
+    if (dx >= LCD_TOUCH_SWIPE_THRESHOLD && dx > dy)
+    {
+        if (touch_state.x > s_touch_start_x)
+        {
+            lcd_change_page_relative(-1);
+        }
+        else
+        {
+            lcd_change_page_relative(1);
+        }
+    }
+}
+
 static uint8_t lcd_status_changed(const App_DeviceStatus_t *current, const App_DeviceStatus_t *previous)
 {
     if ((current == NULL) || (previous == NULL))
@@ -55,10 +155,11 @@ static uint8_t lcd_status_changed(const App_DeviceStatus_t *current, const App_D
         (current->relay1 != previous->relay1) ||
         (current->relay2 != previous->relay2) ||
         (current->weather.rain_detected != previous->weather.rain_detected) ||
+        (current->weather.wind_query_failures != previous->weather.wind_query_failures) ||
+        (current->weather.wind_query_error_count != previous->weather.wind_query_error_count) ||
         (current->weather.cj702_online != previous->weather.cj702_online) ||
         (current->weather.wind_online != previous->weather.wind_online) ||
         (current->weather.rain_online != previous->weather.rain_online) ||
-        (current->weather.wind_valid != previous->weather.wind_valid) ||
         (current->last_status_publish_ok != previous->last_status_publish_ok) ||
         (current->l610_at_ready != previous->l610_at_ready) ||
         (current->l610_sim_ready != previous->l610_sim_ready) ||
@@ -82,8 +183,15 @@ static uint8_t lcd_status_changed(const App_DeviceStatus_t *current, const App_D
         return 1U;
     }
 
-    if ((lcd_abs_diff_u16(current->weather.wind_adc_raw, previous->weather.wind_adc_raw) > 8U) ||
-        (lcd_abs_diff_u16(current->weather.direction_adc_raw, previous->weather.direction_adc_raw) > 8U))
+    if ((lcd_abs_diff_u16(current->weather.wind_speed_raw, previous->weather.wind_speed_raw) > 8U) ||
+        (lcd_abs_diff_u16(current->weather.wind_direction_raw, previous->weather.wind_direction_raw) > 8U) ||
+        (lcd_abs_diff_u16(current->weather.wind_query_raw, previous->weather.wind_query_raw) > 0U) ||
+        (lcd_abs_diff_u16(current->weather.rain_adc_raw, previous->weather.rain_adc_raw) > 8U))
+    {
+        return 1U;
+    }
+
+    if (current->weather.wind_query_rx_count != previous->weather.wind_query_rx_count)
     {
         return 1U;
     }
@@ -97,7 +205,11 @@ static uint8_t lcd_status_changed(const App_DeviceStatus_t *current, const App_D
         lcd_text_changed(current->l610_last_cmd, previous->l610_last_cmd) != 0U ||
         lcd_text_changed(current->l610_last_resp, previous->l610_last_resp) != 0U ||
         lcd_text_changed(current->l610_mqtt_stage, previous->l610_mqtt_stage) != 0U ||
-        lcd_text_changed(current->weather.wind_invalid_reason, previous->weather.wind_invalid_reason) != 0U)
+        lcd_text_changed(current->weather.wind_query_target, previous->weather.wind_query_target) != 0U ||
+        lcd_text_changed(current->weather.wind_last_tx_hex, previous->weather.wind_last_tx_hex) != 0U ||
+        lcd_text_changed(current->weather.wind_last_rx_hex, previous->weather.wind_last_rx_hex) != 0U ||
+        lcd_text_changed(current->weather.wind_direction_text, previous->weather.wind_direction_text) != 0U ||
+        lcd_text_changed(current->weather.rain_level_text, previous->weather.rain_level_text) != 0U)
     {
         return 1U;
     }
@@ -105,42 +217,12 @@ static uint8_t lcd_status_changed(const App_DeviceStatus_t *current, const App_D
     return 0U;
 }
 
-static uint8_t lcd_hit_test_tab(uint16_t x, uint16_t y, LCD_Page_t *page)
-{
-    uint16_t step;
-    uint16_t local_x;
-    uint8_t index;
-
-    if ((page == 0) ||
-        (y < LCD_UI_TAB_Y) ||
-        (y >= (LCD_UI_TAB_Y + LCD_UI_TAB_H)) ||
-        (x < LCD_UI_TAB_X))
-    {
-        return 0U;
-    }
-
-    step = (uint16_t)(LCD_UI_TAB_W + LCD_UI_TAB_GAP);
-    local_x = (uint16_t)(x - LCD_UI_TAB_X);
-    index = (uint8_t)(local_x / step);
-    if (index >= LCD_PAGE_COUNT)
-    {
-        return 0U;
-    }
-
-    if ((local_x % step) >= LCD_UI_TAB_W)
-    {
-        return 0U;
-    }
-
-    *page = (LCD_Page_t)index;
-    return 1U;
-}
-
 void LCD_DebugUI_Init(void)
 {
     LCD_Port_Init();
     LCD_Touch_Init();
     LCD_Port_SetBacklight(100U);
+    lcd_diag_print("[LCD] init ok\r\n");
     s_page = LCD_PAGE_OVERVIEW;
     s_last_refresh_tick = 0U;
     s_last_render_tick = 0U;
@@ -151,75 +233,27 @@ void LCD_DebugUI_Init(void)
 
 void LCD_DebugUI_Task(void)
 {
-    App_DeviceStatus_t status;
-    LCD_TouchState_t touch;
-    LCD_Page_t touched_page;
     uint8_t key_pressed = Key_Scan();
+
+    lcd_handle_touch_navigation();
 
     if (key_pressed != 0U)
     {
-        s_page = (LCD_Page_t)((s_page + 1U) % LCD_PAGE_COUNT);
-        s_force_render = 1U;
+        lcd_change_page_relative(1);
     }
 
-    if (LCD_Touch_Read(&touch) != 0U && touch.pressed != 0U)
-    {
-        if (s_touch_active == 0U)
-        {
-            s_touch_active = 1U;
-            s_touch_tab_handled = 0U;
-            s_touch_start_x = touch.x;
-            s_touch_start_y = touch.y;
-            s_touch_last_x = touch.x;
-            s_touch_last_y = touch.y;
-
-            if (lcd_hit_test_tab(touch.x, touch.y, &touched_page) != 0U)
-            {
-                s_page = touched_page;
-                s_touch_tab_handled = 1U;
-                s_force_render = 1U;
-            }
-        }
-        else
-        {
-            s_touch_last_x = touch.x;
-            s_touch_last_y = touch.y;
-        }
-    }
-    else if (s_touch_active != 0U)
-    {
-        uint16_t dx = lcd_abs_diff_u16(s_touch_last_x, s_touch_start_x);
-        uint16_t dy = lcd_abs_diff_u16(s_touch_last_y, s_touch_start_y);
-
-        if ((s_touch_tab_handled == 0U) && (dx > 80U) && (dx > dy))
-        {
-            if (s_touch_last_x < s_touch_start_x)
-            {
-                s_page = (LCD_Page_t)((s_page + 1U) % LCD_PAGE_COUNT);
-            }
-            else
-            {
-                s_page = (LCD_Page_t)((s_page + LCD_PAGE_COUNT - 1U) % LCD_PAGE_COUNT);
-            }
-            s_force_render = 1U;
-        }
-
-        s_touch_active = 0U;
-        s_touch_tab_handled = 0U;
-    }
-
-    App_FillDeviceStatus(&status);
-    status.lcd_refresh_tick = s_last_render_tick;
-    status.lcd_refresh_count = s_refresh_count;
+    App_FillDeviceStatus(&s_work_status);
+    s_work_status.lcd_refresh_tick = s_last_render_tick;
+    s_work_status.lcd_refresh_count = s_refresh_count;
 
     if ((s_force_render == 0U) &&
         (s_has_last_status != 0U) &&
-        (lcd_status_changed(&status, &s_last_status) == 0U))
+        (lcd_status_changed(&s_work_status, &s_last_status) == 0U))
     {
         return;
     }
 
-    if ((s_force_render == 0U) && ((HAL_GetTick() - s_last_refresh_tick) < 350U))
+    if ((s_force_render == 0U) && ((HAL_GetTick() - s_last_refresh_tick) < 800U))
     {
         return;
     }
@@ -227,11 +261,11 @@ void LCD_DebugUI_Task(void)
     s_last_refresh_tick = HAL_GetTick();
     s_last_render_tick = s_last_refresh_tick;
     s_refresh_count++;
-    status.lcd_refresh_tick = s_last_render_tick;
-    status.lcd_refresh_count = s_refresh_count;
-    LCD_UI_ModelUpdate(&s_model, &status);
+    s_work_status.lcd_refresh_tick = s_last_render_tick;
+    s_work_status.lcd_refresh_count = s_refresh_count;
+    LCD_UI_ModelUpdate(&s_model, &s_work_status);
     LCD_UI_RenderPage(s_page, &s_model);
-    memcpy(&s_last_status, &status, sizeof(s_last_status));
+    memcpy(&s_last_status, &s_work_status, sizeof(s_last_status));
     s_has_last_status = 1U;
     s_force_render = 0U;
 }

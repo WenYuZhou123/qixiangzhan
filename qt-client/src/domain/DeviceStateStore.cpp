@@ -218,6 +218,36 @@ double DeviceStateStore::windDirection() const
     return state != nullptr ? state->windDirection : 0.0;
 }
 
+int DeviceStateStore::windSpeedRaw() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->windSpeedRaw : 0;
+}
+
+int DeviceStateStore::windDirectionRaw() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->windDirectionRaw : 0;
+}
+
+int DeviceStateStore::rainAdcRaw() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->rainAdcRaw : 0;
+}
+
+QString DeviceStateStore::windDirectionText() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->windDirectionText : QString();
+}
+
+QString DeviceStateStore::rainLevelText() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->rainLevelText : QString();
+}
+
 double DeviceStateStore::temperature() const
 {
     const DeviceState *state = currentState();
@@ -358,6 +388,11 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
         const QJsonObject weather = json.value(QStringLiteral("weather")).toObject();
         state.windSpeed = readDouble(weather, "wind_speed", state.windSpeed);
         state.windDirection = readDouble(weather, "wind_direction", state.windDirection);
+        state.windSpeedRaw = readInt(weather, "wind_speed_raw", state.windSpeedRaw);
+        state.windDirectionRaw = readInt(weather, "wind_direction_raw", state.windDirectionRaw);
+        state.rainAdcRaw = readInt(weather, "rain_adc_raw", state.rainAdcRaw);
+        state.windDirectionText = readString(weather, "wind_direction_text", state.windDirectionText);
+        state.rainLevelText = readString(weather, "rain_level_text", state.rainLevelText);
         state.temperature = readDouble(weather, "temperature", state.temperature);
         state.humidity = readDouble(weather, "humidity", state.humidity);
         state.pressure = readDouble(weather, "pressure", state.pressure);
@@ -374,6 +409,11 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
     {
         state.windSpeed = readDouble(json, "weather_wind_speed", state.windSpeed);
         state.windDirection = readDouble(json, "weather_wind_direction", state.windDirection);
+        state.windSpeedRaw = readInt(json, "weather_wind_speed_raw", state.windSpeedRaw);
+        state.windDirectionRaw = readInt(json, "weather_wind_direction_raw", state.windDirectionRaw);
+        state.rainAdcRaw = readInt(json, "weather_rain_adc_raw", state.rainAdcRaw);
+        state.windDirectionText = readString(json, "weather_wind_direction_text", state.windDirectionText);
+        state.rainLevelText = readString(json, "weather_rain_level_text", state.rainLevelText);
         state.temperature = readDouble(json, "weather_temperature", state.temperature);
         state.humidity = readDouble(json, "weather_humidity", state.humidity);
         state.pressure = readDouble(json, "weather_pressure", state.pressure);

@@ -27,9 +27,14 @@ qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma_e
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_mdma.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_exti.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_cortex.h
+qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc.h
+qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_adc.h
+qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc_ex.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash_ex.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_hsem.h
+qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_sram.h
+qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_fmc.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c_ex.h
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr.h
@@ -38,6 +43,7 @@ qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.
 qixiangzhan\l610_mqtt.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 qixiangzhan\l610_mqtt.o: ..\HARDWARE\L610\l610.h
 qixiangzhan\l610_mqtt.o: ../Core/Inc/usart.h
+qixiangzhan\l610_mqtt.o: ../HARDWARE/APP/device_status.h
 qixiangzhan\l610_mqtt.o: ../HARDWARE/PROTOCOL/protocol.h
 qixiangzhan\l610_mqtt.o: ../HARDWARE/RElAY/relay.h
 qixiangzhan\l610_mqtt.o: D:\works\MDK\Core\ARM\ARMCC\Bin\..\include\string.h

@@ -28,9 +28,14 @@ qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_mdma.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_exti.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_cortex.h
+qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc.h
+qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_adc.h
+qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_adc_ex.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash_ex.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_hsem.h
+qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_sram.h
+qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_fmc.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c_ex.h
 qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr.h
@@ -40,3 +45,8 @@ qixiangzhan\app_weather.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uar
 qixiangzhan\app_weather.o: ..\HARDWARE\WEATHER\uart_ringbuf.h
 qixiangzhan\app_weather.o: D:\works\MDK\Core\ARM\ARMCC\Bin\..\include\string.h
 qixiangzhan\app_weather.o: ..\HARDWARE\WEATHER\sensor_wind_zts.h
+qixiangzhan\app_weather.o: ..\HARDWARE\WEATHER\sensor_common.h
+qixiangzhan\app_weather.o: ..\HARDWARE\WEATHER\weather_data.h
+qixiangzhan\app_weather.o: ..\HARDWARE\WEATHER\sensor_air_cj702.h
+qixiangzhan\app_weather.o: ..\HARDWARE\WEATHER\sensor_rain.h
+qixiangzhan\app_weather.o: ../Core/Inc/adc.h

@@ -53,6 +53,16 @@ def ensure_runtime_schema() -> None:
         statements.append("ALTER TABLE devices ADD COLUMN weather_wind_speed FLOAT NOT NULL DEFAULT 0")
     if "weather_wind_direction" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_wind_direction FLOAT NOT NULL DEFAULT 0")
+    if "weather_wind_speed_raw" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_wind_speed_raw INTEGER NOT NULL DEFAULT 0")
+    if "weather_wind_direction_raw" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_wind_direction_raw INTEGER NOT NULL DEFAULT 0")
+    if "weather_rain_adc_raw" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_rain_adc_raw INTEGER NOT NULL DEFAULT 0")
+    if "weather_wind_direction_text" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_wind_direction_text VARCHAR(32) NOT NULL DEFAULT ''")
+    if "weather_rain_level_text" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_rain_level_text VARCHAR(32) NOT NULL DEFAULT ''")
     if "weather_temperature" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_temperature FLOAT NOT NULL DEFAULT 0")
     if "weather_humidity" not in device_columns:

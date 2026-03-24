@@ -8,6 +8,7 @@ static const char *g_page_labels[LCD_PAGE_COUNT] = {
     "WEATHER",
     "DEBUG"
 };
+static LCD_Page_t g_last_page = LCD_PAGE_COUNT;
 
 static void draw_tabs(LCD_Page_t page)
 {
@@ -64,15 +65,19 @@ static void render_overview(const LCD_UI_Model_t *model)
     snprintf(line, sizeof(line), "%.1fC  %.0f%%", (double)s->weather.temperature, (double)s->weather.humidity);
     draw_card(16, 190, 188, 100, "TEMP/HUM", line, LCD_PORT_COLOR_ACCENT);
 
-    snprintf(line, sizeof(line), "%.1fm/s  %.0fdeg", (double)s->weather.wind_speed, (double)s->weather.wind_direction);
+    snprintf(line, sizeof(line), "%.1fm/s  %s %.1fdeg",
+             (double)s->weather.wind_speed,
+             s->weather.wind_direction_text,
+             (double)s->weather.wind_direction);
     draw_card(212, 190, 188, 100, "WIND", line, LCD_PORT_COLOR_ACCENT);
 
     snprintf(line, sizeof(line), "PM2.5 %.0f", (double)s->weather.pm25);
     draw_card(408, 190, 188, 100, "AIR", line, LCD_PORT_COLOR_ACCENT);
 
-    snprintf(line, sizeof(line), "%s", s->weather.rain_detected ? "RAIN DETECTED" : "NO RAIN");
+    snprintf(line, sizeof(line), "%.0f%%", (double)s->weather.rain_value);
     draw_card(604, 190, 180, 100, "RAIN", line, LCD_PORT_COLOR_ACCENT);
 
+    LCD_Port_FillRect(0, 316, LCD_UI_SCREEN_WIDTH, 28, LCD_PORT_COLOR_BG);
     LCD_Port_DrawText(18, 320, "Touch top tabs or swipe left/right to change pages.", LCD_PORT_COLOR_MUTED, 0U);
 }
 
@@ -95,6 +100,7 @@ static void render_pad(const LCD_UI_Model_t *model)
     snprintf(line, sizeof(line), "R1 %u  R2 %u", (unsigned)s->relay1, (unsigned)s->relay2);
     draw_card(408, 190, 376, 100, "RELAY", line, LCD_PORT_COLOR_ACCENT);
 
+    LCD_Port_FillRect(0, 316, LCD_UI_SCREEN_WIDTH, 28, LCD_PORT_COLOR_BG);
     LCD_Port_DrawText(18, 320, s->state_text, LCD_PORT_COLOR_TEXT, 0U);
 }
 
@@ -107,7 +113,7 @@ static void render_weather(const LCD_UI_Model_t *model)
 
     snprintf(line, sizeof(line), "WIND %.1f m/s", (double)s->weather.wind_speed);
     draw_card(16, 76, 188, 92, "WIND SPEED", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "%.0f deg", (double)s->weather.wind_direction);
+    snprintf(line, sizeof(line), "%s %.1f deg", s->weather.wind_direction_text, (double)s->weather.wind_direction);
     draw_card(212, 76, 188, 92, "WIND DIR", line, LCD_PORT_COLOR_ACCENT);
     snprintf(line, sizeof(line), "%.1f C", (double)s->weather.temperature);
     draw_card(408, 76, 188, 92, "TEMP", line, LCD_PORT_COLOR_ACCENT);
@@ -120,22 +126,27 @@ static void render_weather(const LCD_UI_Model_t *model)
     draw_card(212, 184, 188, 92, "PM10", line, LCD_PORT_COLOR_ACCENT);
     snprintf(line, sizeof(line), "CO2 %.0f ppm", (double)s->weather.co2);
     draw_card(408, 184, 188, 92, "CO2", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "%s", s->weather.rain_detected ? "RAIN" : "CLEAR");
+    snprintf(line, sizeof(line), "%.0f%%", (double)s->weather.rain_value);
     draw_card(604, 184, 180, 92, "RAIN", line, LCD_PORT_COLOR_ACCENT);
 
     snprintf(line, sizeof(line), "TVOC %.3f  CH2O %.3f", (double)s->weather.tvoc, (double)s->weather.ch2o);
     draw_card(16, 292, 380, 92, "GAS", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "ADC %u / %u", (unsigned)s->weather.wind_adc_raw, (unsigned)s->weather.direction_adc_raw);
-    draw_card(408, 292, 376, 92, "RAW ADC", line, LCD_PORT_COLOR_WARN);
-    snprintf(line, sizeof(line), "WIND %s %s",
-             (s->weather.wind_valid != 0U) ? "VALID" : "INVALID",
-             s->weather.wind_invalid_reason);
-    LCD_Port_DrawText(18, 400, line, (s->weather.wind_valid != 0U) ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_DANGER, 0U);
+    snprintf(line, sizeof(line), "WS %u  WD %u  R %u",
+             (unsigned)s->weather.wind_speed_raw,
+             (unsigned)s->weather.wind_direction_raw,
+             (unsigned)s->weather.rain_adc_raw);
+    draw_card(408, 292, 376, 92, "RAW INPUT", line, LCD_PORT_COLOR_WARN);
+    LCD_Port_FillRect(0, 396, LCD_UI_SCREEN_WIDTH, 28, LCD_PORT_COLOR_BG);
+    snprintf(line, sizeof(line), "RAIN %.3fV  TXT %s",
+             (double)s->weather.rain_voltage,
+             s->weather.rain_level_text);
+    LCD_Port_DrawText(18, 400, line, LCD_PORT_COLOR_SUCCESS, 0U);
 }
 
 static void render_debug(const LCD_UI_Model_t *model)
 {
     char line[128];
+    char footer[128];
     const App_DeviceStatus_t *s = &model->status;
 
     draw_header("DEBUG", LCD_PAGE_DEBUG);
@@ -144,7 +155,9 @@ static void render_debug(const LCD_UI_Model_t *model)
              (unsigned long)s->lcd_refresh_tick);
     draw_card(16, 76, 240, 88, "LCD", line, LCD_PORT_COLOR_ACCENT);
 
-    snprintf(line, sizeof(line), "MQTT %s", s->l610_mqtt_stage);
+    snprintf(line, sizeof(line), "MQTT %s %s",
+             s->l610_mqtt_stage,
+             s->l610_mqtt_detail[0] ? s->l610_mqtt_detail : "");
     draw_card(272, 76, 240, 88, "MQTT STATE", line, LCD_PORT_COLOR_ACCENT);
 
     snprintf(line, sizeof(line), "AT %u SIM %u CREG %u ATT %u",
@@ -155,14 +168,20 @@ static void render_debug(const LCD_UI_Model_t *model)
     draw_card(528, 76, 256, 88, "L610", line, LCD_PORT_COLOR_WARN);
 
     draw_card(16, 178, 380, 88, "LAST CMD", s->l610_last_cmd[0] ? s->l610_last_cmd : "N/A", LCD_PORT_COLOR_ACCENT);
+    draw_card(408, 178, 376, 88, "LAST RESP", s->l610_last_resp[0] ? s->l610_last_resp : "N/A", LCD_PORT_COLOR_SUCCESS);
 
-    snprintf(line, sizeof(line), "WIND %s %s",
-             (s->weather.wind_valid != 0U) ? "VALID" : "INVALID",
-             s->weather.wind_invalid_reason);
-    draw_card(408, 178, 376, 88, "WIND CHECK", line, (s->weather.wind_valid != 0U) ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_DANGER);
-
-    draw_card(16, 280, 768, 72, "LAST RESP", s->l610_last_resp[0] ? s->l610_last_resp : "N/A", LCD_PORT_COLOR_WARN);
-    LCD_Port_DrawText(18, 370, s->last_error_text[0] ? s->last_error_text : "NONE", LCD_PORT_COLOR_DANGER, 0U);
+    draw_card(16, 280, 376, 72, "WIND TX", s->weather.wind_last_tx_hex[0] ? s->weather.wind_last_tx_hex : "N/A", LCD_PORT_COLOR_ACCENT);
+    draw_card(408, 280, 376, 72, "WIND RX", s->weather.wind_last_rx_hex[0] ? s->weather.wind_last_rx_hex : "N/A", LCD_PORT_COLOR_WARN);
+    LCD_Port_FillRect(0, 366, LCD_UI_SCREEN_WIDTH, 28, LCD_PORT_COLOR_BG);
+    snprintf(footer, sizeof(footer), "IP %s  %s %s R%u F%u RX%lu E%lu",
+             s->net.ip[0] ? s->net.ip : "N/A",
+             s->weather.adc_mode_text,
+             s->weather.wind_query_target,
+             (unsigned)s->weather.wind_query_raw,
+             (unsigned)s->weather.wind_query_failures,
+             (unsigned long)s->weather.wind_query_rx_count,
+             (unsigned long)s->weather.wind_query_error_count);
+    LCD_Port_DrawText(18, 370, footer, LCD_PORT_COLOR_DANGER, 0U);
 }
 
 void LCD_UI_RenderPage(LCD_Page_t page, const LCD_UI_Model_t *model)
@@ -173,7 +192,11 @@ void LCD_UI_RenderPage(LCD_Page_t page, const LCD_UI_Model_t *model)
     }
 
     LCD_Port_BeginFrame();
-    LCD_Port_Clear(LCD_PORT_COLOR_BG);
+    if (page != g_last_page)
+    {
+        LCD_Port_Clear(LCD_PORT_COLOR_BG);
+        g_last_page = page;
+    }
 
     switch (page)
     {

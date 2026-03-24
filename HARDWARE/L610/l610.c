@@ -3,7 +3,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define L610_PWRKEY_PORT                 GPIOH
+#define L610_PWRKEY_PIN                  GPIO_PIN_6
+#define L610_STATUS_PORT                 GPIOH
+#define L610_STATUS_PIN                  GPIO_PIN_7
+
+#define L610_PWRKEY_ACTIVE_LEVEL         GPIO_PIN_RESET
+#define L610_PWRKEY_IDLE_LEVEL           GPIO_PIN_SET
+#define L610_PWRKEY_PULSE_MS             1200U
+#define L610_BOOT_WAIT_MS                5000U
+#define L610_SYNC_INITIAL_RETRIES        3U
+#define L610_SYNC_POST_BOOT_RETRIES      5U
+
 static void L610_SendCmdLine(const char *cmd);
+static void L610_PowerKeySet(GPIO_PinState level);
+static void L610_TryPowerOnSequence(void);
 
 static uint8_t l610_rx_buf[L610_RX_BUF_SIZE];
 static uint16_t l610_rx_len = 0;
@@ -11,23 +25,73 @@ static uint8_t l610_ch = 0;
 static L610_Info_t l610_cached_info;
 static uint8_t l610_cached_info_valid = 0;
 static uint32_t l610_cached_info_tick = 0;
+static L610_Owner_t l610_owner = L610_OWNER_NONE;
+static uint8_t l610_owner_depth = 0U;
+
+static const char *L610_GetOwnerName(L610_Owner_t owner)
+{
+    switch (owner)
+    {
+    case L610_OWNER_DIAG:
+        return "DIAG";
+    case L610_OWNER_MQTT:
+        return "MQTT";
+    case L610_OWNER_PROTOCOL:
+        return "PROTOCOL";
+    case L610_OWNER_NONE:
+    default:
+        return "NONE";
+    }
+}
 
 /* 内部调试打印 */
 static void L610_DebugPrint(const char *str)
 {
-    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 1000);
+#if L610_DEBUG_ENABLE
+    HAL_UART_Transmit(&huart6, (uint8_t *)str, strlen(str), 1000);
+#else
+    (void)str;
+#endif
+}
+
+static void L610_DebugPrintBuffer(const uint8_t *buf, uint16_t len)
+{
+#if L610_DEBUG_ENABLE
+    if (buf != NULL && len > 0U)
+    {
+        HAL_UART_Transmit(&huart6, (uint8_t *)buf, len, 1000);
+    }
+#else
+    (void)buf;
+    (void)len;
+#endif
 }
 
 /* 打印当前接收缓冲区 */
 static void L610_PrintBuffer(void)
 {
-    HAL_UART_Transmit(&huart2, l610_rx_buf, l610_rx_len, 1000);
+    L610_DebugPrintBuffer(l610_rx_buf, l610_rx_len);
     L610_DebugPrint("\r\n");
 }
 
 static void L610_PrepareCommandTx(void)
 {
     L610_FlushRx();
+}
+
+static void L610_PowerKeySet(GPIO_PinState level)
+{
+    HAL_GPIO_WritePin(L610_PWRKEY_PORT, L610_PWRKEY_PIN, level);
+}
+
+static void L610_TryPowerOnSequence(void)
+{
+    L610_DebugPrint("[L610] PWRKEY pulse start\r\n");
+    L610_PowerKeySet(L610_PWRKEY_ACTIVE_LEVEL);
+    HAL_Delay(L610_PWRKEY_PULSE_MS);
+    L610_PowerKeySet(L610_PWRKEY_IDLE_LEVEL);
+    HAL_Delay(L610_BOOT_WAIT_MS);
+    L610_DebugPrint("[L610] PWRKEY pulse done\r\n");
 }
 
 static void L610_UpdateInfoCache(const L610_Info_t *info)
@@ -73,8 +137,12 @@ static void L610_SendCmdLine(const char *cmd)
 
 void L610_Init(void)
 {
+    L610_PowerKeySet(L610_PWRKEY_IDLE_LEVEL);
+    (void)HAL_GPIO_ReadPin(L610_STATUS_PORT, L610_STATUS_PIN);
     L610_ClearBuffer();
     L610_ClearInfoCache();
+    l610_owner = L610_OWNER_NONE;
+    l610_owner_depth = 0U;
 }
 
 void L610_ClearBuffer(void)
@@ -104,6 +172,59 @@ void L610_FlushRx(void)
     L610_ClearBuffer();
 }
 
+L610_SessionStatus_t L610_BeginSession(L610_Owner_t owner)
+{
+    if (owner == L610_OWNER_NONE)
+    {
+        return L610_SESSION_INVALID;
+    }
+
+    if (l610_owner == L610_OWNER_NONE)
+    {
+        l610_owner = owner;
+        l610_owner_depth = 1U;
+        return L610_SESSION_OK;
+    }
+
+    if (l610_owner == owner)
+    {
+        if (l610_owner_depth < 0xFFU)
+        {
+            l610_owner_depth++;
+        }
+        return L610_SESSION_OK;
+    }
+
+    return L610_SESSION_BUSY;
+}
+
+void L610_EndSession(L610_Owner_t owner)
+{
+    if (owner == L610_OWNER_NONE || l610_owner != owner)
+    {
+        return;
+    }
+
+    if (l610_owner_depth > 1U)
+    {
+        l610_owner_depth--;
+        return;
+    }
+
+    l610_owner = L610_OWNER_NONE;
+    l610_owner_depth = 0U;
+}
+
+L610_Owner_t L610_GetOwner(void)
+{
+    return l610_owner;
+}
+
+const char *L610_GetOwnerString(void)
+{
+    return L610_GetOwnerName(l610_owner);
+}
+
 void L610_SendCmd(const char *cmd)
 {
     if (cmd == NULL)
@@ -119,7 +240,7 @@ L610_Status_t L610_Sync(uint8_t disable_echo)
     uint8_t attempt;
     L610_Status_t status = L610_TIMEOUT;
 
-    for (attempt = 0; attempt < 3; attempt++)
+    for (attempt = 0; attempt < L610_SYNC_INITIAL_RETRIES; attempt++)
     {
         status = L610_SendSimpleCommand("AT", 1500);
         if (status == L610_OK)
@@ -132,7 +253,23 @@ L610_Status_t L610_Sync(uint8_t disable_echo)
 
     if (status != L610_OK)
     {
-        return status;
+        L610_TryPowerOnSequence();
+
+        for (attempt = 0; attempt < L610_SYNC_POST_BOOT_RETRIES; attempt++)
+        {
+            status = L610_SendSimpleCommand("AT", 1500);
+            if (status == L610_OK)
+            {
+                break;
+            }
+
+            HAL_Delay(300);
+        }
+
+        if (status != L610_OK)
+        {
+            return status;
+        }
     }
 
     if (disable_echo)
@@ -147,6 +284,17 @@ L610_Status_t L610_Sync(uint8_t disable_echo)
 
             HAL_Delay(100);
         }
+    }
+
+    for (attempt = 0; attempt < 2; attempt++)
+    {
+        status = L610_SendSimpleCommand("AT+CMEE=2", 1500);
+        if (status == L610_OK)
+        {
+            break;
+        }
+
+        HAL_Delay(100);
     }
 
     return status;
@@ -254,7 +402,31 @@ L610_Status_t L610_SetEchoOff(void)
     L610_Status_t status = L610_ReadResponse(1500);
 
     L610_DebugPrint("Recv:\r\n");
-    HAL_UART_Transmit(&huart2, l610_rx_buf, l610_rx_len, 1000);
+    L610_DebugPrintBuffer(l610_rx_buf, l610_rx_len);
+    L610_DebugPrint("\r\n");
+
+    return status;
+}
+
+L610_Status_t L610_SetVerboseError(uint8_t mode)
+{
+    char cmd[16];
+    L610_Status_t status;
+
+    if (mode > 2U)
+    {
+        return L610_ERROR;
+    }
+
+    snprintf(cmd, sizeof(cmd), "AT+CMEE=%u\r\n", (unsigned int)mode);
+    L610_DebugPrint("Send: ");
+    L610_DebugPrint(cmd);
+    L610_PrepareCommandTx();
+    L610_SendCmd(cmd);
+    status = L610_ReadResponse(1500);
+
+    L610_DebugPrint("Recv:\r\n");
+    L610_DebugPrintBuffer(l610_rx_buf, l610_rx_len);
     L610_DebugPrint("\r\n");
 
     return status;
@@ -269,7 +441,7 @@ L610_Status_t L610_TestAT(void)
     L610_Status_t status = L610_ReadResponse(1500);
 
     L610_DebugPrint("Recv:\r\n");
-    HAL_UART_Transmit(&huart2, l610_rx_buf, l610_rx_len, 1000);
+    L610_DebugPrintBuffer(l610_rx_buf, l610_rx_len);
     L610_DebugPrint("\r\n");
 
     return status;

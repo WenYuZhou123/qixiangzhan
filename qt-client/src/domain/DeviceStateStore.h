@@ -27,6 +27,11 @@ class DeviceStateStore : public QObject
     Q_PROPERTY(qint64 tick READ tick NOTIFY deviceStateChanged)
     Q_PROPERTY(double windSpeed READ windSpeed NOTIFY deviceStateChanged)
     Q_PROPERTY(double windDirection READ windDirection NOTIFY deviceStateChanged)
+    Q_PROPERTY(int windSpeedRaw READ windSpeedRaw NOTIFY deviceStateChanged)
+    Q_PROPERTY(int windDirectionRaw READ windDirectionRaw NOTIFY deviceStateChanged)
+    Q_PROPERTY(int rainAdcRaw READ rainAdcRaw NOTIFY deviceStateChanged)
+    Q_PROPERTY(QString windDirectionText READ windDirectionText NOTIFY deviceStateChanged)
+    Q_PROPERTY(QString rainLevelText READ rainLevelText NOTIFY deviceStateChanged)
     Q_PROPERTY(double temperature READ temperature NOTIFY deviceStateChanged)
     Q_PROPERTY(double humidity READ humidity NOTIFY deviceStateChanged)
     Q_PROPERTY(double pressure READ pressure NOTIFY deviceStateChanged)
@@ -67,6 +72,11 @@ public:
     qint64 tick() const;
     double windSpeed() const;
     double windDirection() const;
+    int windSpeedRaw() const;
+    int windDirectionRaw() const;
+    int rainAdcRaw() const;
+    QString windDirectionText() const;
+    QString rainLevelText() const;
     double temperature() const;
     double humidity() const;
     double pressure() const;

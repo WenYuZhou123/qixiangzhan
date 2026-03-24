@@ -1,210 +1,430 @@
 #include "sensor_wind_zts.h"
-#include "adc.h"
+#include "bsp_uart.h"
+#include "board_rs485.h"
+#include "modbus_rtu.h"
 #include "weather_data.h"
 #include "stm32h7xx_hal.h"
-#include "stm32h7xx_hal_adc.h"
+#include <stdio.h>
 #include <string.h>
 
-/*
- * Current implementation assumes the wind-speed / wind-direction signal has already
- * been converted from the sensor's differential industrial analog output to a safe
- * single-ended ADC voltage referenced to MCU GND.
- *
- * Do NOT directly connect the raw differential output pair of a 10-30V transmitter
- * to STM32 ADC pins before confirming the frontend circuit and common-reference rule.
- */
+#define WIND_SENSOR_MAX_FAILURES         3U
+#define WIND_SENSOR_QUERY_TIMEOUT_MS     1500U
+#define WIND_SENSOR_UART_TIMEOUT_MS      200U
+#define WIND_SENSOR_INTERFRAME_DELAY_MS  80U
+#define WIND_SENSOR_ONLINE_HOLD_MS       3000U
+#define WIND_RS485_MAX_FRAME_LEN         16U
+#define WIND_RS485_RX_BUF_SIZE           48U
+#define WIND_SENSOR_DEBUG_HEX_BYTES      12U
 
-#define WIND_SPEED_ADC_CHANNEL         ADC_CHANNEL_3
-#define WIND_DIRECTION_ADC_CHANNEL     ADC_CHANNEL_4
-#define WIND_ADC_MAX_COUNTS            65535.0f
-#define WIND_ADC_REF_VOLTAGE           3.3f
-#define WIND_SENSOR_OUTPUT_MAX_VOLTAGE 2.0f
-#define WIND_SPEED_FULL_SCALE_MPS      30.0f
-#define WIND_SENSOR_MIN_VALID_VOLTAGE  0.02f
-#define WIND_SENSOR_MAX_VALID_VOLTAGE  2.20f
-#define WIND_SENSOR_STUCK_DELTA        4U
-#define WIND_SENSOR_STUCK_LIMIT        8U
+typedef struct
+{
+    uint8_t slave;
+    uint8_t func_code;
+    uint32_t baudrate;
+    uint16_t reg_addr;
+    uint16_t reg_count;
+} WindModbusNodeConfig_t;
+
+typedef struct
+{
+    const WindModbusNodeConfig_t *node;
+    uint8_t waiting;
+    uint8_t rx_buf[WIND_RS485_RX_BUF_SIZE];
+    uint16_t rx_len;
+    uint32_t started_tick;
+    uint32_t next_send_tick;
+} WindQueryState_t;
+
+static const WindModbusNodeConfig_t s_wind_speed_node = {0x01U, 0x03U, 4800U, 0x0000U, 1U};
+static const WindModbusNodeConfig_t s_wind_direction_node = {0x02U, 0x03U, 4800U, 0x0000U, 1U};
 
 WindSensor_t g_wind_sensor = {0};
-static uint16_t s_prev_speed_raw = 0U;
-static uint16_t s_prev_direction_raw = 0U;
-static uint8_t s_stuck_count = 0U;
+static WindQueryState_t s_query_state = {0};
+static uint8_t s_next_query_is_direction = 0U;
 
-static void WindSensor_SetInvalid(const char *reason)
+static void WindSensor_SetFrameText(char *dst, uint16_t dst_len, const char *text)
 {
-    g_wind_sensor.valid = 0U;
-    g_wind_sensor.wind_speed_mps = 0.0f;
-    g_wind_sensor.wind_dir_deg = 0.0f;
-    g_weather_data.wind_speed_mps = 0.0f;
-    g_weather_data.wind_dir_deg = 0.0f;
-    g_weather_data.wind_online = 0U;
-
-    if (reason != NULL)
+    if (dst == NULL || dst_len == 0U)
     {
-        strncpy(g_wind_sensor.invalid_reason, reason, sizeof(g_wind_sensor.invalid_reason) - 1U);
-        g_wind_sensor.invalid_reason[sizeof(g_wind_sensor.invalid_reason) - 1U] = '\0';
+        return;
+    }
+
+    if (text == NULL)
+    {
+        text = "N/A";
+    }
+
+    strncpy(dst, text, dst_len - 1U);
+    dst[dst_len - 1U] = '\0';
+}
+
+static void WindSensor_FormatFrameText(char *dst, uint16_t dst_len, const uint8_t *buf, uint16_t len)
+{
+    static const char hex_digits[] = "0123456789ABCDEF";
+    char hex_text[(WIND_SENSOR_DEBUG_HEX_BYTES * 2U) + 4U];
+    uint16_t shown_len;
+    uint16_t pos = 0U;
+    uint16_t i;
+
+    if (dst == NULL || dst_len == 0U)
+    {
+        return;
+    }
+
+    if (buf == NULL || len == 0U)
+    {
+        WindSensor_SetFrameText(dst, dst_len, "N/A");
+        return;
+    }
+
+    shown_len = (len > WIND_SENSOR_DEBUG_HEX_BYTES) ? WIND_SENSOR_DEBUG_HEX_BYTES : len;
+    for (i = 0U; i < shown_len && (pos + 2U) < sizeof(hex_text); i++)
+    {
+        hex_text[pos++] = hex_digits[(buf[i] >> 4) & 0x0FU];
+        hex_text[pos++] = hex_digits[buf[i] & 0x0FU];
+    }
+
+    if ((len > shown_len) && (pos + 3U) < sizeof(hex_text))
+    {
+        hex_text[pos++] = '.';
+        hex_text[pos++] = '.';
+        hex_text[pos++] = '.';
+    }
+    hex_text[pos] = '\0';
+
+    (void)snprintf(dst, dst_len, "%uB %s", (unsigned)len, hex_text);
+}
+
+static void WindSensor_SetDirectionText(const char *text)
+{
+    if (text == NULL)
+    {
+        text = "N/A";
+    }
+
+    strncpy(g_wind_sensor.direction_text, text, sizeof(g_wind_sensor.direction_text) - 1U);
+    g_wind_sensor.direction_text[sizeof(g_wind_sensor.direction_text) - 1U] = '\0';
+}
+
+static void WindSensor_ResetSpeedValue(void)
+{
+    g_wind_sensor.speed_raw_reg = 0U;
+    g_wind_sensor.wind_speed_mps = 0.0f;
+    g_wind_sensor.speed_last_ok_tick = 0U;
+}
+
+static void WindSensor_ResetDirectionValue(void)
+{
+    g_wind_sensor.direction_raw_reg = 0U;
+    g_wind_sensor.wind_dir_deg = 0.0f;
+    g_wind_sensor.direction_last_ok_tick = 0U;
+    WindSensor_SetDirectionText("N/A");
+}
+
+static void WindSensor_PublishSnapshot(uint8_t online)
+{
+    g_weather_data.wind_speed_raw = g_wind_sensor.speed_raw_reg;
+    g_weather_data.wind_direction_raw = g_wind_sensor.direction_raw_reg;
+    g_weather_data.wind_speed_mps = g_wind_sensor.wind_speed_mps;
+    g_weather_data.wind_dir_deg = g_wind_sensor.wind_dir_deg;
+    g_weather_data.wind_speed_voltage = 0.0f;
+    g_weather_data.wind_direction_voltage = 0.0f;
+    strncpy(g_weather_data.wind_direction_text,
+            g_wind_sensor.direction_text,
+            sizeof(g_weather_data.wind_direction_text) - 1U);
+    g_weather_data.wind_direction_text[sizeof(g_weather_data.wind_direction_text) - 1U] = '\0';
+    g_weather_data.wind_online = online;
+    g_wind_sensor.base.online = online;
+}
+
+static uint8_t WindSensor_IsDataFresh(uint32_t now, uint32_t last_ok_tick)
+{
+    if (last_ok_tick == 0U)
+    {
+        return 0U;
+    }
+
+    return (uint8_t)(((now - last_ok_tick) <= WIND_SENSOR_ONLINE_HOLD_MS) ? 1U : 0U);
+}
+
+static HAL_StatusTypeDef WindSensor_SetUartBaudrate(uint32_t baudrate)
+{
+    if (g_uart_wind.huart == NULL)
+    {
+        return HAL_ERROR;
+    }
+
+    if (g_uart_wind.huart->Init.BaudRate == baudrate)
+    {
+        return HAL_OK;
+    }
+
+    return HAL_ERROR;
+}
+
+static void WindSensor_AppendRxByte(uint8_t byte)
+{
+    if (s_query_state.rx_len < sizeof(s_query_state.rx_buf))
+    {
+        s_query_state.rx_buf[s_query_state.rx_len++] = byte;
+        return;
+    }
+
+    memmove(s_query_state.rx_buf, s_query_state.rx_buf + 1, sizeof(s_query_state.rx_buf) - 1U);
+    s_query_state.rx_buf[sizeof(s_query_state.rx_buf) - 1U] = byte;
+    s_query_state.rx_len = (uint16_t)sizeof(s_query_state.rx_buf);
+}
+
+static void WindSensor_ReadIncoming(void)
+{
+    uint8_t tmp[16];
+    uint16_t available;
+    uint16_t to_read;
+    uint16_t i;
+
+    available = UartRingBuf_Available(&g_uart_wind.rx_rb);
+    if (available == 0U)
+    {
+        return;
+    }
+
+    to_read = (available > sizeof(tmp)) ? (uint16_t)sizeof(tmp) : available;
+    to_read = UartRingBuf_Read(&g_uart_wind.rx_rb, tmp, to_read);
+    for (i = 0U; i < to_read; i++)
+    {
+        WindSensor_AppendRxByte(tmp[i]);
+    }
+
+    WindSensor_FormatFrameText(g_wind_sensor.last_rx_hex,
+                               (uint16_t)sizeof(g_wind_sensor.last_rx_hex),
+                               s_query_state.rx_buf,
+                               s_query_state.rx_len);
+}
+
+static uint8_t WindSensor_TryParseFrame(uint16_t *out_regs)
+{
+    uint16_t expected_len;
+    uint16_t start;
+
+    if (s_query_state.node == NULL || out_regs == NULL)
+    {
+        return 0U;
+    }
+
+    expected_len = (uint16_t)(5U + (s_query_state.node->reg_count * 2U));
+    if (s_query_state.rx_len < expected_len)
+    {
+        return 0U;
+    }
+
+    for (start = 0U; (uint16_t)(start + expected_len) <= s_query_state.rx_len; start++)
+    {
+        if (Modbus_ParseReadRegsResp(&s_query_state.rx_buf[start],
+                                     expected_len,
+                                     s_query_state.node->slave,
+                                     s_query_state.node->func_code,
+                                     s_query_state.node->reg_count,
+                                     out_regs) != 0U)
+        {
+            return 1U;
+        }
+    }
+
+    return 0U;
+}
+
+static const WindModbusNodeConfig_t *WindSensor_GetActiveNode(void)
+{
+    return (s_next_query_is_direction != 0U) ? &s_wind_direction_node : &s_wind_speed_node;
+}
+
+static void WindSensor_DecodeDirectionText(float direction_deg)
+{
+    static const char *const direction_names[8] = {
+        "N", "NE", "E", "SE", "S", "SW", "W", "NW"
+    };
+    float normalized = direction_deg;
+    int index;
+
+    while (normalized < 0.0f)
+    {
+        normalized += 360.0f;
+    }
+    while (normalized >= 360.0f)
+    {
+        normalized -= 360.0f;
+    }
+
+    index = (int)((normalized + 22.5f) / 45.0f);
+    index %= 8;
+    WindSensor_SetDirectionText(direction_names[index]);
+}
+
+static void WindSensor_CompleteQuery(uint8_t success, uint16_t raw_value, uint32_t now)
+{
+    uint8_t rx_seen = (uint8_t)((s_query_state.rx_len > 0U) ? 1U : 0U);
+
+    if (g_wind_sensor.current_query_is_direction == 0U)
+    {
+        if (success != 0U)
+        {
+            g_wind_sensor.speed_failures = 0U;
+            g_wind_sensor.speed_raw_reg = raw_value;
+            g_wind_sensor.wind_speed_mps = ((float)raw_value) / 10.0f;
+            g_wind_sensor.speed_last_ok_tick = now;
+            g_wind_sensor.last_query_raw = raw_value;
+            g_wind_sensor.last_query_failures = 0U;
+        }
+        else
+        {
+            if (g_wind_sensor.speed_failures < 0xFFU)
+            {
+                g_wind_sensor.speed_failures++;
+            }
+            g_wind_sensor.last_query_raw = g_wind_sensor.speed_raw_reg;
+            g_wind_sensor.last_query_failures = g_wind_sensor.speed_failures;
+            if (g_wind_sensor.speed_failures >= WIND_SENSOR_MAX_FAILURES)
+            {
+                WindSensor_ResetSpeedValue();
+            }
+        }
     }
     else
     {
-        strcpy(g_wind_sensor.invalid_reason, "invalid");
-    }
-}
-
-static uint16_t WindSensor_ReadAdcChannel(uint32_t channel)
-{
-    ADC_ChannelConfTypeDef sConfig = {0};
-
-    sConfig.Channel = channel;
-    sConfig.Rank = ADC_REGULAR_RANK_1;
-    sConfig.SamplingTime = ADC_SAMPLETIME_64CYCLES_5;
-    sConfig.SingleDiff = ADC_SINGLE_ENDED;
-    sConfig.OffsetNumber = ADC_OFFSET_NONE;
-    sConfig.Offset = 0;
-    sConfig.OffsetSignedSaturation = DISABLE;
-
-    if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-    {
-        return 0U;
-    }
-    if (HAL_ADC_Start(&hadc1) != HAL_OK)
-    {
-        return 0U;
-    }
-    if (HAL_ADC_PollForConversion(&hadc1, 20U) != HAL_OK)
-    {
-        HAL_ADC_Stop(&hadc1);
-        return 0U;
-    }
-
-    {
-        uint16_t value = (uint16_t)HAL_ADC_GetValue(&hadc1);
-        HAL_ADC_Stop(&hadc1);
-        return value;
-    }
-}
-
-static float WindSensor_AdcToVoltage(uint16_t adc_raw)
-{
-    return ((float)adc_raw / WIND_ADC_MAX_COUNTS) * WIND_ADC_REF_VOLTAGE;
-}
-
-static float WindSensor_DecodeDirection(float voltage)
-{
-    static const float direction_voltages[8] = {
-        0.00f, 0.25f, 0.50f, 0.75f, 1.00f, 1.25f, 1.50f, 1.75f
-    };
-    static const float direction_degrees[8] = {
-        0.0f, 45.0f, 90.0f, 135.0f, 180.0f, 225.0f, 270.0f, 315.0f
-    };
-
-    uint32_t i = 0U;
-    uint32_t best_index = 0U;
-    float best_diff = 100.0f;
-
-    for (i = 0U; i < 8U; ++i)
-    {
-        float diff = voltage - direction_voltages[i];
-        if (diff < 0.0f)
+        if (success != 0U)
         {
-            diff = -diff;
+            g_wind_sensor.direction_failures = 0U;
+            g_wind_sensor.direction_raw_reg = raw_value;
+            g_wind_sensor.wind_dir_deg = ((float)raw_value) / 10.0f;
+            g_wind_sensor.direction_last_ok_tick = now;
+            WindSensor_DecodeDirectionText(g_wind_sensor.wind_dir_deg);
+            g_wind_sensor.last_query_raw = raw_value;
+            g_wind_sensor.last_query_failures = 0U;
         }
-        if (diff < best_diff)
+        else
         {
-            best_diff = diff;
-            best_index = i;
+            if (g_wind_sensor.direction_failures < 0xFFU)
+            {
+                g_wind_sensor.direction_failures++;
+            }
+            g_wind_sensor.last_query_raw = g_wind_sensor.direction_raw_reg;
+            g_wind_sensor.last_query_failures = g_wind_sensor.direction_failures;
+            if (g_wind_sensor.direction_failures >= WIND_SENSOR_MAX_FAILURES)
+            {
+                WindSensor_ResetDirectionValue();
+            }
         }
     }
 
-    return direction_degrees[best_index];
+    s_query_state.waiting = 0U;
+    s_query_state.node = NULL;
+    s_query_state.rx_len = 0U;
+    if ((success == 0U) && (rx_seen == 0U))
+    {
+        WindSensor_SetFrameText(g_wind_sensor.last_rx_hex,
+                                (uint16_t)sizeof(g_wind_sensor.last_rx_hex),
+                                "TIMEOUT");
+    }
+    s_query_state.next_send_tick = now + WIND_SENSOR_INTERFRAME_DELAY_MS;
+    s_next_query_is_direction ^= 1U;
+}
+
+static void WindSensor_StartQuery(uint32_t now)
+{
+    uint8_t tx_buf[8];
+    uint16_t tx_len;
+
+    g_wind_sensor.current_query_is_direction = s_next_query_is_direction;
+    s_query_state.node = WindSensor_GetActiveNode();
+    s_query_state.rx_len = 0U;
+    UartRingBuf_Clear(&g_uart_wind.rx_rb);
+
+    if (WindSensor_SetUartBaudrate(s_query_state.node->baudrate) != HAL_OK)
+    {
+        WindSensor_CompleteQuery(0U, 0U, now);
+        return;
+    }
+
+    tx_len = Modbus_BuildReadRegs(s_query_state.node->slave,
+                                  s_query_state.node->func_code,
+                                  s_query_state.node->reg_addr,
+                                  s_query_state.node->reg_count,
+                                  tx_buf);
+    WindSensor_FormatFrameText(g_wind_sensor.last_tx_hex,
+                               (uint16_t)sizeof(g_wind_sensor.last_tx_hex),
+                               tx_buf,
+                               tx_len);
+    WindSensor_SetFrameText(g_wind_sensor.last_rx_hex,
+                            (uint16_t)sizeof(g_wind_sensor.last_rx_hex),
+                            "N/A");
+
+    if (BoardRS485_Transmit(g_uart_wind.huart, tx_buf, tx_len, WIND_SENSOR_UART_TIMEOUT_MS) != HAL_OK)
+    {
+        WindSensor_CompleteQuery(0U, 0U, now);
+        return;
+    }
+
+    s_query_state.waiting = 1U;
+    s_query_state.started_tick = now;
 }
 
 void WindSensor_Init(void)
 {
-    g_wind_sensor.base.online = 0U;
+    memset(&g_wind_sensor, 0, sizeof(g_wind_sensor));
+    memset(&s_query_state, 0, sizeof(s_query_state));
     g_wind_sensor.base.last_update_tick = 0U;
-    g_wind_sensor.speed_raw_adc = 0U;
-    g_wind_sensor.direction_raw_adc = 0U;
-    g_wind_sensor.wind_speed_mps = 0.0f;
-    g_wind_sensor.wind_dir_deg = 0.0f;
-    g_wind_sensor.valid = 0U;
-    strcpy(g_wind_sensor.invalid_reason, "no_signal");
-    s_prev_speed_raw = 0U;
-    s_prev_direction_raw = 0U;
-    s_stuck_count = 0U;
-    g_weather_data.wind_online = 0U;
+    g_wind_sensor.last_poll_tick = 0U;
+    s_next_query_is_direction = 0U;
+    WindSensor_ResetSpeedValue();
+    WindSensor_ResetDirectionValue();
+    g_wind_sensor.last_query_raw = 0U;
+    g_wind_sensor.last_query_failures = 0U;
+    g_wind_sensor.current_query_is_direction = 0U;
+    WindSensor_SetFrameText(g_wind_sensor.last_tx_hex,
+                            (uint16_t)sizeof(g_wind_sensor.last_tx_hex),
+                            "N/A");
+    WindSensor_SetFrameText(g_wind_sensor.last_rx_hex,
+                            (uint16_t)sizeof(g_wind_sensor.last_rx_hex),
+                            "N/A");
+    WindSensor_PublishSnapshot(0U);
 }
 
 void WindSensor_Poll(void)
 {
-    const uint16_t speed_raw = WindSensor_ReadAdcChannel(WIND_SPEED_ADC_CHANNEL);
-    const uint16_t direction_raw = WindSensor_ReadAdcChannel(WIND_DIRECTION_ADC_CHANNEL);
-    const float speed_voltage = WindSensor_AdcToVoltage(speed_raw);
-    const float direction_voltage = WindSensor_AdcToVoltage(direction_raw);
-    const uint16_t speed_delta = (speed_raw >= s_prev_speed_raw) ? (uint16_t)(speed_raw - s_prev_speed_raw) : (uint16_t)(s_prev_speed_raw - speed_raw);
-    const uint16_t direction_delta = (direction_raw >= s_prev_direction_raw) ? (uint16_t)(direction_raw - s_prev_direction_raw) : (uint16_t)(s_prev_direction_raw - direction_raw);
+    uint16_t regs[1] = {0U};
+    uint8_t overall_online;
+    uint32_t now = HAL_GetTick();
 
-    g_wind_sensor.speed_raw_adc = speed_raw;
-    g_wind_sensor.direction_raw_adc = direction_raw;
+    g_wind_sensor.last_poll_tick = now;
+    WindSensor_ReadIncoming();
 
-    if ((speed_raw == 0U && direction_raw == 0U) ||
-        (speed_raw == 0xFFFFU) ||
-        (direction_raw == 0xFFFFU))
+    if (s_query_state.waiting != 0U)
     {
-        WindSensor_SetInvalid("no_frontend");
-    }
-    else if ((speed_voltage < WIND_SENSOR_MIN_VALID_VOLTAGE) ||
-             (direction_voltage < WIND_SENSOR_MIN_VALID_VOLTAGE) ||
-             (speed_voltage > WIND_SENSOR_MAX_VALID_VOLTAGE) ||
-             (direction_voltage > WIND_SENSOR_MAX_VALID_VOLTAGE))
-    {
-        WindSensor_SetInvalid("out_of_range");
-    }
-    else
-    {
-        if ((speed_delta <= WIND_SENSOR_STUCK_DELTA) && (direction_delta <= WIND_SENSOR_STUCK_DELTA))
+        if (WindSensor_TryParseFrame(regs) != 0U)
         {
-            if (s_stuck_count < 0xFFU)
-            {
-                s_stuck_count++;
-            }
+            WindSensor_CompleteQuery(1U, regs[0], now);
         }
-        else
+        else if ((now - s_query_state.started_tick) >= WIND_SENSOR_QUERY_TIMEOUT_MS)
         {
-            s_stuck_count = 0U;
-        }
-
-        if (s_stuck_count >= WIND_SENSOR_STUCK_LIMIT)
-        {
-            WindSensor_SetInvalid("stuck_signal");
-        }
-        else
-        {
-            g_wind_sensor.valid = 1U;
-            strcpy(g_wind_sensor.invalid_reason, "ok");
-            g_wind_sensor.wind_speed_mps = (speed_voltage / WIND_SENSOR_OUTPUT_MAX_VOLTAGE) * WIND_SPEED_FULL_SCALE_MPS;
-            if (g_wind_sensor.wind_speed_mps < 0.0f)
-            {
-                g_wind_sensor.wind_speed_mps = 0.0f;
-            }
-            if (g_wind_sensor.wind_speed_mps > WIND_SPEED_FULL_SCALE_MPS)
-            {
-                g_wind_sensor.wind_speed_mps = WIND_SPEED_FULL_SCALE_MPS;
-            }
-
-            g_wind_sensor.wind_dir_deg = WindSensor_DecodeDirection(direction_voltage);
-            g_weather_data.wind_speed_mps = g_wind_sensor.wind_speed_mps;
-            g_weather_data.wind_dir_deg = g_wind_sensor.wind_dir_deg;
-            g_weather_data.wind_online = 1U;
+            WindSensor_CompleteQuery(0U, 0U, now);
         }
     }
+    else if ((s_query_state.next_send_tick == 0U) || (now >= s_query_state.next_send_tick))
+    {
+        WindSensor_StartQuery(now);
+    }
 
-    s_prev_speed_raw = speed_raw;
-    s_prev_direction_raw = direction_raw;
-    g_wind_sensor.base.online = g_wind_sensor.valid;
-    g_wind_sensor.base.last_update_tick = HAL_GetTick();
+    overall_online = (uint8_t)((WindSensor_IsDataFresh(now, g_wind_sensor.speed_last_ok_tick) != 0U) &&
+                               (WindSensor_IsDataFresh(now, g_wind_sensor.direction_last_ok_tick) != 0U));
+    if (overall_online != 0U)
+    {
+        g_wind_sensor.base.last_update_tick = now;
+    }
+
+    WindSensor_PublishSnapshot(overall_online);
 }
 
 void WindSensor_Parse(void)
 {
-    /* Analog wind sensors do not need UART frame parsing. */
+    /* Wind sensors use non-blocking Modbus polling; no async parser is needed. */
 }

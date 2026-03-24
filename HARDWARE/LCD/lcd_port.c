@@ -2,10 +2,12 @@
 
 #include "atk_md0700_font.h"
 #include "main.h"
+#include "usart.h"
 #include "stm32h7xx_hal_sram.h"
 #include "stm32h7xx_ll_fmc.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #define LCD_NATIVE_WIDTH              480U
 #define LCD_NATIVE_HEIGHT             800U
@@ -50,6 +52,11 @@ typedef enum
 static LCD_PortState_t s_lcd = {0};
 static SRAM_HandleTypeDef s_sram = {0};
 static uint8_t s_delay_ready = 0U;
+
+static void lcd_debug_print(const char *text)
+{
+    (void)text;
+}
 
 static void lcd_delay_init(void)
 {
@@ -630,6 +637,7 @@ void LCD_Port_Init(void)
     if (pid != LCD_DRIVER_PID)
     {
         s_lcd.ready = 0U;
+        lcd_debug_print("LCD PID FAIL\r\n");
         return;
     }
 

@@ -62,6 +62,11 @@ class PadSummaryResponse(BaseModel):
 class WeatherSummaryResponse(BaseModel):
     wind_speed: float = 0.0
     wind_direction: float = 0.0
+    wind_speed_raw: int = 0
+    wind_direction_raw: int = 0
+    rain_adc_raw: int = 0
+    wind_direction_text: str = ""
+    rain_level_text: str = ""
     temperature: float = 0.0
     humidity: float = 0.0
     pressure: float = 0.0

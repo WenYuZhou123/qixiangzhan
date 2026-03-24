@@ -120,6 +120,11 @@ def normalize_payload_map(payload_map: dict[str, Any], topic: str) -> dict[str, 
             normalized["weather"] = {
                 "wind_speed": coerce_float(weather.get("wind_speed"), 0.0),
                 "wind_direction": coerce_float(weather.get("wind_direction"), 0.0),
+                "wind_speed_raw": coerce_int(weather.get("wind_speed_raw"), 0),
+                "wind_direction_raw": coerce_int(weather.get("wind_direction_raw"), 0),
+                "rain_adc_raw": coerce_int(weather.get("rain_adc_raw"), 0),
+                "wind_direction_text": str(weather.get("wind_direction_text") or ""),
+                "rain_level_text": str(weather.get("rain_level_text") or ""),
                 "temperature": coerce_float(weather.get("temperature"), 0.0),
                 "humidity": coerce_float(weather.get("humidity"), 0.0),
                 "pressure": coerce_float(weather.get("pressure"), 0.0),
@@ -215,6 +220,11 @@ def extract_weather_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
     return {
         "wind_speed": coerce_float(weather.get("wind_speed", payload_map.get("weather_wind_speed")), 0.0),
         "wind_direction": coerce_float(weather.get("wind_direction", payload_map.get("weather_wind_direction")), 0.0),
+        "wind_speed_raw": coerce_int(weather.get("wind_speed_raw", payload_map.get("weather_wind_speed_raw")), 0),
+        "wind_direction_raw": coerce_int(weather.get("wind_direction_raw", payload_map.get("weather_wind_direction_raw")), 0),
+        "rain_adc_raw": coerce_int(weather.get("rain_adc_raw", payload_map.get("weather_rain_adc_raw")), 0),
+        "wind_direction_text": str(weather.get("wind_direction_text", payload_map.get("weather_wind_direction_text")) or ""),
+        "rain_level_text": str(weather.get("rain_level_text", payload_map.get("weather_rain_level_text")) or ""),
         "temperature": coerce_float(weather.get("temperature", payload_map.get("weather_temperature")), 0.0),
         "humidity": coerce_float(weather.get("humidity", payload_map.get("weather_humidity")), 0.0),
         "pressure": coerce_float(weather.get("pressure", payload_map.get("weather_pressure")), 0.0),
@@ -390,6 +400,11 @@ def serialize_device(device: Device, active_alarm_count: int = 0) -> dict[str, A
         "weather": {
             "wind_speed": device.weather_wind_speed,
             "wind_direction": device.weather_wind_direction,
+            "wind_speed_raw": int(device.weather_wind_speed_raw),
+            "wind_direction_raw": int(device.weather_wind_direction_raw),
+            "rain_adc_raw": int(device.weather_rain_adc_raw),
+            "wind_direction_text": device.weather_wind_direction_text,
+            "rain_level_text": device.weather_rain_level_text,
             "temperature": device.weather_temperature,
             "humidity": device.weather_humidity,
             "pressure": device.weather_pressure,
@@ -730,6 +745,11 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
         device.pad_mode = pad["mode"]
         device.weather_wind_speed = weather["wind_speed"]
         device.weather_wind_direction = weather["wind_direction"]
+        device.weather_wind_speed_raw = weather["wind_speed_raw"]
+        device.weather_wind_direction_raw = weather["wind_direction_raw"]
+        device.weather_rain_adc_raw = weather["rain_adc_raw"]
+        device.weather_wind_direction_text = weather["wind_direction_text"]
+        device.weather_rain_level_text = weather["rain_level_text"]
         device.weather_temperature = weather["temperature"]
         device.weather_humidity = weather["humidity"]
         device.weather_pressure = weather["pressure"]

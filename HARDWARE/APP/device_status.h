@@ -19,6 +19,11 @@ typedef struct
 {
     float wind_speed;
     float wind_direction;
+    uint16_t wind_speed_raw;
+    uint16_t wind_direction_raw;
+    char adc_mode_text[APP_STATUS_FIELD_LEN];
+    float wind_speed_voltage;
+    float wind_direction_voltage;
     float temperature;
     float humidity;
     float pressure;
@@ -30,13 +35,20 @@ typedef struct
     float co2;
     float tvoc;
     float ch2o;
-    uint16_t wind_adc_raw;
-    uint16_t direction_adc_raw;
+    uint16_t rain_adc_raw;
+    float rain_voltage;
+    char wind_direction_text[APP_STATUS_FIELD_LEN];
+    char rain_level_text[APP_STATUS_FIELD_LEN];
+    char wind_query_target[APP_STATUS_FIELD_LEN];
+    char wind_last_tx_hex[APP_STATUS_TEXT_LEN];
+    char wind_last_rx_hex[APP_STATUS_TEXT_LEN];
+    uint16_t wind_query_raw;
+    uint8_t wind_query_failures;
+    uint32_t wind_query_rx_count;
+    uint32_t wind_query_error_count;
     uint8_t cj702_online;
     uint8_t wind_online;
     uint8_t rain_online;
-    uint8_t wind_valid;
-    char wind_invalid_reason[APP_STATUS_FIELD_LEN];
 } App_WeatherStatus_t;
 
 typedef struct
@@ -70,6 +82,7 @@ typedef struct
     uint32_t l610_timeout_count;
     char l610_last_cmd[APP_STATUS_FIELD_LEN];
     char l610_mqtt_stage[APP_STATUS_FIELD_LEN];
+    char l610_mqtt_detail[APP_STATUS_FIELD_LEN];
     char state_text[APP_STATUS_TEXT_LEN];
     char last_error_text[APP_STATUS_TEXT_LEN];
     char last_cj702_frame_hex[APP_STATUS_TEXT_LEN];

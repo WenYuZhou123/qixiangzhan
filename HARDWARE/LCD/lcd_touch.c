@@ -14,6 +14,10 @@
 #define LCD_TOUCH_REG_PERIODACTIVE    0x88U
 #define LCD_TOUCH_REG_TD_STATUS       0x02U
 #define LCD_TOUCH_REG_TP1             0x03U
+#define LCD_TOUCH_REG_TP2             0x09U
+#define LCD_TOUCH_REG_TP3             0x0FU
+#define LCD_TOUCH_REG_TP4             0x15U
+#define LCD_TOUCH_REG_TP5             0x1BU
 
 #define LCD_TOUCH_SCL_PORT            GPIOH
 #define LCD_TOUCH_SCL_PIN             GPIO_PIN_6
@@ -23,6 +27,14 @@
 #define LCD_TOUCH_INT_PIN             GPIO_PIN_7
 #define LCD_TOUCH_RST_PORT            GPIOI
 #define LCD_TOUCH_RST_PIN             GPIO_PIN_8
+
+static const uint8_t g_touch_point_regs[LCD_TOUCH_MAX_POINTS] = {
+    LCD_TOUCH_REG_TP1,
+    LCD_TOUCH_REG_TP2,
+    LCD_TOUCH_REG_TP3,
+    LCD_TOUCH_REG_TP4,
+    LCD_TOUCH_REG_TP5
+};
 
 static uint8_t s_touch_ready = 0U;
 
@@ -65,6 +77,8 @@ static void lcd_touch_iic_init(void)
 
     gpio.Pin = LCD_TOUCH_SDA_PIN;
     gpio.Mode = GPIO_MODE_OUTPUT_OD;
+    gpio.Pull = GPIO_PULLUP;
+    gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     HAL_GPIO_Init(LCD_TOUCH_SDA_PORT, &gpio);
 
     lcd_touch_sda(1U);
@@ -181,6 +195,7 @@ static void lcd_touch_iic_send_byte(uint8_t data)
         lcd_touch_scl(0U);
         data <<= 1;
     }
+
     lcd_touch_sda(1U);
 }
 
@@ -277,8 +292,8 @@ static void lcd_touch_reg_init(void)
 void LCD_Touch_Init(void)
 {
     lcd_touch_hw_init();
-    lcd_touch_iic_init();
     lcd_touch_reset();
+    lcd_touch_iic_init();
     lcd_touch_reg_init();
     s_touch_ready = 1U;
 }
@@ -286,13 +301,14 @@ void LCD_Touch_Init(void)
 uint8_t LCD_Touch_Read(LCD_TouchState_t *state)
 {
     uint8_t status = 0U;
-    uint8_t tp[4];
+    uint8_t point_info[4];
+    uint8_t touch_count;
     uint16_t raw_x;
     uint16_t raw_y;
     uint16_t width;
     uint16_t height;
 
-    if (state == 0)
+    if (state == NULL)
     {
         return 0U;
     }
@@ -307,23 +323,22 @@ uint8_t LCD_Touch_Read(LCD_TouchState_t *state)
     }
 
     lcd_touch_read_reg(LCD_TOUCH_REG_TD_STATUS, &status, 1U);
-    status &= 0x0FU;
-    if ((status == 0U) || (status > LCD_TOUCH_MAX_POINTS))
+    touch_count = (uint8_t)(status & 0x0FU);
+    if ((touch_count == 0U) || (touch_count > LCD_TOUCH_MAX_POINTS))
     {
         return 0U;
     }
 
-    lcd_touch_read_reg(LCD_TOUCH_REG_TP1, tp, sizeof(tp));
-    raw_x = (uint16_t)(((tp[0] & 0x0FU) << 8) | tp[1]);
-    raw_y = (uint16_t)(((tp[2] & 0x0FU) << 8) | tp[3]);
-
+    lcd_touch_read_reg(g_touch_point_regs[0], point_info, sizeof(point_info));
+    raw_x = (uint16_t)(((point_info[0] & 0x0FU) << 8) | point_info[1]);
+    raw_y = (uint16_t)(((point_info[2] & 0x0FU) << 8) | point_info[3]);
     width = LCD_Port_GetWidth();
     height = LCD_Port_GetHeight();
 
     switch (LCD_Port_GetDisplayDir())
     {
     case LCD_PORT_DISP_DIR_0:
-        state->x = (raw_x <= width) ? (uint16_t)(width - raw_x) : 0U;
+        state->x = (uint16_t)(width - raw_x);
         state->y = raw_y;
         break;
 
@@ -334,13 +349,13 @@ uint8_t LCD_Touch_Read(LCD_TouchState_t *state)
 
     case LCD_PORT_DISP_DIR_180:
         state->x = raw_x;
-        state->y = (raw_y <= height) ? (uint16_t)(height - raw_y) : 0U;
+        state->y = (uint16_t)(height - raw_y);
         break;
 
     case LCD_PORT_DISP_DIR_270:
     default:
-        state->x = (raw_y <= width) ? (uint16_t)(width - raw_y) : 0U;
-        state->y = (raw_x <= height) ? (uint16_t)(height - raw_x) : 0U;
+        state->x = (uint16_t)(width - raw_y);
+        state->y = (uint16_t)(height - raw_x);
         break;
     }
 

@@ -23,6 +23,11 @@ struct DeviceState
     qint64 tick = 0;
     double windSpeed = 0.0;
     double windDirection = 0.0;
+    int windSpeedRaw = 0;
+    int windDirectionRaw = 0;
+    int rainAdcRaw = 0;
+    QString windDirectionText;
+    QString rainLevelText;
     double temperature = 0.0;
     double humidity = 0.0;
     double pressure = 0.0;
