@@ -21,12 +21,12 @@
 
 namespace
 {
-constexpr int kAndroidDevicesPollIntervalMs = 600;
-constexpr int kDesktopDevicesPollIntervalMs = 1200;
-constexpr int kAndroidSecondaryPollIntervalMs = 1400;
-constexpr int kDesktopSecondaryPollIntervalMs = 2800;
-constexpr int kPendingCommandPollIntervalMs = 250;
-constexpr int kPendingCommandTimeoutMs = 6000;
+constexpr int kAndroidDevicesPollIntervalMs = 400;
+constexpr int kDesktopDevicesPollIntervalMs = 800;
+constexpr int kAndroidSecondaryPollIntervalMs = 900;
+constexpr int kDesktopSecondaryPollIntervalMs = 1800;
+constexpr int kPendingCommandPollIntervalMs = 100;
+constexpr int kPendingCommandTimeoutMs = 18000;
 
 bool readBoolLike(const QJsonValue &value, bool fallback = false)
 {
@@ -223,9 +223,11 @@ RemoteSyncService::RemoteSyncService(ApiClient *apiClient,
     connect(m_authSession, &AuthSession::sessionChanged, this, [this]() {
         restartRealtimeSocket();
         refreshVisibleData();
+        updateDebugSnapshot();
     });
     connect(m_authSession, &AuthSession::apiBaseUrlChanged, this, [this]() {
         restartRealtimeSocket();
+        updateDebugSnapshot();
     });
 
 #if defined(RELAY_CLIENT_HAS_WEBSOCKETS)
@@ -258,6 +260,7 @@ RemoteSyncService::RemoteSyncService(ApiClient *apiClient,
 
     restartRealtimeSocket();
     reconfigurePolling();
+    updateDebugSnapshot();
 }
 
 bool RemoteSyncService::androidMode() const
@@ -294,6 +297,7 @@ void RemoteSyncService::setCurrentPage(const QString &page)
     emit currentPageChanged();
     refreshVisibleData();
     reconfigurePolling();
+    updateDebugSnapshot();
 }
 
 QString RemoteSyncService::currentDeviceId() const
@@ -315,6 +319,7 @@ void RemoteSyncService::setCurrentDeviceId(const QString &deviceId)
     {
         refreshVisibleData();
     }
+    updateDebugSnapshot();
 }
 
 QString RemoteSyncService::connectionState() const
@@ -801,6 +806,15 @@ bool RemoteSyncService::sendCommand(const QString &command, int value, bool hasV
         {
             m_stateStore->clearLastError();
             m_stateStore->noteAckStatus(summary, status);
+            m_stateStore->applyPredictedCommand(m_currentDeviceId, command, value, hasValue);
+            if (m_deviceRepository != nullptr)
+            {
+                const DeviceState predicted = m_stateStore->stateForDevice(m_currentDeviceId);
+                if (!predicted.deviceId.isEmpty())
+                {
+                    m_deviceRepository->upsertState(predicted);
+                }
+            }
         }
         m_pendingRemoteMsgId = msgId;
         m_pendingRemoteCommand = command;
@@ -808,8 +822,6 @@ bool RemoteSyncService::sendCommand(const QString &command, int value, bool hasV
         m_commandPollTimer.start();
         setConnectionState(QStringLiteral("Cloud Ready"), true);
         setLastError(QString());
-        refreshCurrentDevice();
-        refreshDevices();
         refreshCommands();
         reply->deleteLater();
     });
@@ -876,6 +888,10 @@ void RemoteSyncService::pollPendingCommand()
 
 void RemoteSyncService::appendLog(const QString &line)
 {
+    if (m_cache != nullptr)
+    {
+        m_cache->setSetting(QStringLiteral("debug.remoteSync.lastLog"), line);
+    }
     if (m_logGateway != nullptr)
     {
         m_logGateway->appendExternalLog(QStringLiteral("[API] %1").arg(line));
@@ -909,6 +925,7 @@ void RemoteSyncService::setLastError(const QString &message)
     }
 
     m_lastError = message;
+    updateDebugSnapshot();
     emit lastErrorChanged();
 }
 
@@ -951,10 +968,12 @@ void RemoteSyncService::reconfigurePolling()
     if (intervalMs <= 0)
     {
         m_pagePollTimer.stop();
+        updateDebugSnapshot();
         return;
     }
 
     m_pagePollTimer.start(intervalMs);
+    updateDebugSnapshot();
 }
 
 bool RemoteSyncService::canUseApi() const
@@ -1192,4 +1211,26 @@ void RemoteSyncService::applyAlarmCacheCounts()
     {
         m_stateStore->updateAlarmCount(it.key(), it.value());
     }
+}
+
+void RemoteSyncService::updateDebugSnapshot() const
+{
+    if (m_cache == nullptr)
+    {
+        return;
+    }
+
+    const bool authPresent = m_authSession != nullptr && m_authSession->authenticated();
+    const bool remoteAuth = m_authSession != nullptr && m_authSession->remoteAuthenticated();
+    const QString apiBase = m_authSession != nullptr ? m_authSession->apiBaseUrl() : QString();
+
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.apiBase"), apiBase);
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.authenticated"), authPresent ? QStringLiteral("1") : QStringLiteral("0"));
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.remoteAuthenticated"), remoteAuth ? QStringLiteral("1") : QStringLiteral("0"));
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.canUseApi"), canUseApi() ? QStringLiteral("1") : QStringLiteral("0"));
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.currentPage"), m_currentPage);
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.currentDeviceId"), m_currentDeviceId);
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.connectionState"), m_connectionState);
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.connected"), m_connected ? QStringLiteral("1") : QStringLiteral("0"));
+    m_cache->setSetting(QStringLiteral("debug.remoteSync.lastError"), m_lastError);
 }

@@ -568,6 +568,73 @@ void DeviceStateStore::setLastError(const QString &errorText)
     emit lastErrorChanged();
 }
 
+void DeviceStateStore::applyPredictedCommand(const QString &deviceId,
+                                             const QString &command,
+                                             int value,
+                                             bool hasValue)
+{
+    const QString resolvedDeviceId = deviceId.isEmpty() ? m_currentDeviceId : deviceId;
+    if (resolvedDeviceId.isEmpty())
+    {
+        return;
+    }
+
+    DeviceState &state = ensureState(resolvedDeviceId);
+    const bool enabled = hasValue && value != 0;
+    const QString pendingText = QStringLiteral("%1 pending").arg(command);
+
+    if (command == QStringLiteral("set_r1") && hasValue)
+    {
+        state.relay1On = enabled;
+        state.padLeftState = enabled ? QStringLiteral("open") : QStringLiteral("closed");
+    }
+    else if (command == QStringLiteral("set_r2") && hasValue)
+    {
+        state.relay2On = enabled;
+        state.padRightState = enabled ? QStringLiteral("open") : QStringLiteral("closed");
+    }
+    else if (command == QStringLiteral("set_all") && hasValue)
+    {
+        state.relay1On = enabled;
+        state.relay2On = enabled;
+        state.padLeftState = enabled ? QStringLiteral("open") : QStringLiteral("closed");
+        state.padRightState = enabled ? QStringLiteral("open") : QStringLiteral("closed");
+    }
+    else if (command == QStringLiteral("pad_open"))
+    {
+        state.relay1On = true;
+        state.relay2On = true;
+        state.padLeftState = QStringLiteral("opening");
+        state.padRightState = QStringLiteral("opening");
+    }
+    else if (command == QStringLiteral("pad_close"))
+    {
+        state.relay1On = false;
+        state.relay2On = false;
+        state.padLeftState = QStringLiteral("closing");
+        state.padRightState = QStringLiteral("closing");
+    }
+    else if (command == QStringLiteral("pad_stop"))
+    {
+        state.padLeftState = QStringLiteral("stopped");
+        state.padRightState = QStringLiteral("stopped");
+    }
+    else if (command != QStringLiteral("query_status") && command != QStringLiteral("query_pad_status"))
+    {
+        return;
+    }
+
+    state.stateText = pendingText;
+    state.timestamp = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    state.lastSeenMs = QDateTime::currentMSecsSinceEpoch();
+
+    if (resolvedDeviceId == m_currentDeviceId)
+    {
+        emit deviceStateChanged();
+    }
+    emit deviceUpdated(resolvedDeviceId);
+}
+
 void DeviceStateStore::clearLastError()
 {
     setLastError(QString());

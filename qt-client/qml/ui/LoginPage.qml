@@ -17,14 +17,14 @@ ScrollView {
         const lastError = controller.authSession.lastError
         if (!lastError || lastError.length === 0)
             return ""
-        if (lastError.indexOf("Secure storage") >= 0 || lastError.indexOf("安全存储") >= 0)
+        if (lastError.indexOf("Secure storage") >= 0)
             return "当前环境无法使用安全存储，本次登录不会被长期记住。"
         if (lastError.indexOf("Connection closed") >= 0)
             return "连接已关闭，请确认后端服务已经启动。"
         if (lastError.indexOf("Connection refused") >= 0 || lastError.indexOf("refused") >= 0)
             return "连接被拒绝，请检查 API 地址和端口。"
         if (lastError.indexOf("Invalid or missing bearer token") >= 0)
-            return "登录态无效，请重新登录。"
+            return "登录态已失效，请重新登录。"
         return lastError
     }
 
@@ -110,7 +110,7 @@ ScrollView {
             Label {
                 text: parent.parent.value
                 color: theme.textPrimary
-                font.pixelSize: mobile ? 15 : 15
+                font.pixelSize: 15
                 font.bold: true
                 elide: Text.ElideRight
             }
@@ -119,7 +119,7 @@ ScrollView {
 
     ColumnLayout {
         width: root.availableWidth
-        spacing: 16
+        spacing: theme.sectionGap
 
         Rectangle {
             Layout.fillWidth: true
@@ -156,7 +156,7 @@ ScrollView {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "管理员模式连接后端接口与设备控制；游客模式只读预览，不会发起远程命令。"
+                    text: "管理员模式连接后端接口并支持远程控制；游客模式只读预览，不会下发任何命令。"
                     wrapMode: Text.Wrap
                     color: "#dde8ee"
                     font.pixelSize: mobile ? 15 : 14
@@ -191,7 +191,7 @@ ScrollView {
                     }
 
                     StatusPill {
-                        label: "云端链路"
+                        label: "运行链路"
                         value: theme.connectionStateText(controller.runtimeConnectionState)
                     }
                 }
@@ -227,7 +227,7 @@ ScrollView {
                 Label {
                     Layout.fillWidth: true
                     text: controller.authSession.authenticated
-                          ? "当前身份：" + controller.authSession.displayName + "  ·  " + root.roleText()
+                          ? "当前身份： " + controller.authSession.displayName + " · " + root.roleText()
                           : "管理员模式支持远程登录、设备查询和控制；游客模式仅浏览本地缓存和演示状态。"
                     wrapMode: Text.Wrap
                     color: "#435764"
@@ -238,7 +238,7 @@ ScrollView {
                     Layout.fillWidth: true
                     text: controller.authSession.guestMode
                           ? "游客模式不会请求远程接口，也不会发送任何控制命令。"
-                          : "运行链路：" + theme.connectionStateText(controller.runtimeConnectionState)
+                          : "运行链路： " + theme.connectionStateText(controller.runtimeConnectionState)
                     wrapMode: Text.Wrap
                     color: controller.authSession.guestMode ? "#5f786f" : "#587a72"
                     font.pixelSize: mobile ? 16 : 14
@@ -285,18 +285,25 @@ ScrollView {
                     spacing: 8
 
                     Label {
-                        text: "接口地址"
+                        text: "API Base"
                         color: theme.textMuted
                         font.pixelSize: mobile ? 15 : 13
                     }
 
                     TextField {
-                        id: apiField
                         Layout.fillWidth: true
                         text: root.controller.authSession.apiBaseUrl
-                        placeholderText: "请输入后端地址"
+                        placeholderText: "例如 http://192.168.1.20:8000/api/v1"
                         font.pixelSize: mobile ? 18 : 15
                         onEditingFinished: root.controller.authSession.apiBaseUrl = text
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: "桌面本机可直接使用 127.0.0.1；安卓手机请改成电脑的局域网 IP。"
+                        wrapMode: Text.Wrap
+                        color: theme.textMuted
+                        font.pixelSize: theme.bodySize(mobile)
                     }
                 }
 
@@ -442,7 +449,7 @@ ScrollView {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "游客模式用于演示和只读浏览，不会请求远程接口，也不会下发停机场或工程调试命令。"
+                    text: "游客模式用于演示和只读浏览，不会请求远程接口，也不会下发停机坪或继电器命令。"
                     wrapMode: Text.Wrap
                     color: "#5a6b77"
                     font.pixelSize: mobile ? 16 : 14
@@ -470,7 +477,7 @@ ScrollView {
 
                         Label {
                             width: parent.width
-                            text: "1. 浏览本地缓存的设备状态与历史\n2. 查看当前界面框架与演示数据\n3. 不触发任何远程认证和控制请求"
+                            text: "1. 浏览本地缓存的设备状态与历史\n2. 查看当前页面结构与演示数据\n3. 不触发任何远程认证和控制请求"
                             wrapMode: Text.Wrap
                             color: "#51636f"
                             font.pixelSize: mobile ? 15 : 13

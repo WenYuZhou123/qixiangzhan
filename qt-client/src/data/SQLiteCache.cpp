@@ -15,6 +15,11 @@ QString buildIsoTimestamp()
     return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
 }
 
+QString nonNullText(const QString &value, const QString &fallback = QStringLiteral(""))
+{
+    return value.isNull() ? fallback : value;
+}
+
 QJsonObject stateToJson(const DeviceState &state)
 {
     QJsonObject json;
@@ -355,31 +360,31 @@ void SQLiteCache::upsertDeviceState(const DeviceState &state)
         "ch2o = excluded.ch2o, "
         "timestamp = excluded.timestamp, "
         "active_alarm_count = excluded.active_alarm_count"));
-    cacheQuery.addBindValue(state.deviceId);
-    cacheQuery.addBindValue(state.displayName.isEmpty() ? state.deviceId : state.displayName);
-    cacheQuery.addBindValue(state.protocolProfile);
-    cacheQuery.addBindValue(state.operatorName);
-    cacheQuery.addBindValue(state.ip);
-    cacheQuery.addBindValue(state.timestamp.isEmpty() ? now : state.timestamp);
+    cacheQuery.addBindValue(nonNullText(state.deviceId));
+    cacheQuery.addBindValue(nonNullText(state.displayName.isEmpty() ? state.deviceId : state.displayName, state.deviceId));
+    cacheQuery.addBindValue(nonNullText(state.protocolProfile, QStringLiteral("relay_v1")));
+    cacheQuery.addBindValue(nonNullText(state.operatorName));
+    cacheQuery.addBindValue(nonNullText(state.ip));
+    cacheQuery.addBindValue(nonNullText(state.timestamp.isEmpty() ? now : state.timestamp, now));
     cacheQuery.addBindValue(state.lastSeenMs);
     cacheQuery.addBindValue(state.rssi);
     cacheQuery.addBindValue(state.relay1On ? 1 : 0);
     cacheQuery.addBindValue(state.relay2On ? 1 : 0);
-    cacheQuery.addBindValue(state.padLeftState);
-    cacheQuery.addBindValue(state.padRightState);
+    cacheQuery.addBindValue(nonNullText(state.padLeftState, QStringLiteral("closed")));
+    cacheQuery.addBindValue(nonNullText(state.padRightState, QStringLiteral("closed")));
     cacheQuery.addBindValue(state.padReady ? 1 : 0);
     cacheQuery.addBindValue(state.padOccupied ? 1 : 0);
-    cacheQuery.addBindValue(state.padMode);
+    cacheQuery.addBindValue(nonNullText(state.padMode, QStringLiteral("auto")));
     cacheQuery.addBindValue(state.online ? 1 : 0);
-    cacheQuery.addBindValue(state.stateText);
+    cacheQuery.addBindValue(nonNullText(state.stateText));
     cacheQuery.addBindValue(state.tick);
     cacheQuery.addBindValue(state.windSpeed);
     cacheQuery.addBindValue(state.windDirection);
     cacheQuery.addBindValue(state.windSpeedRaw);
     cacheQuery.addBindValue(state.windDirectionRaw);
     cacheQuery.addBindValue(state.rainAdcRaw);
-    cacheQuery.addBindValue(state.windDirectionText);
-    cacheQuery.addBindValue(state.rainLevelText);
+    cacheQuery.addBindValue(nonNullText(state.windDirectionText));
+    cacheQuery.addBindValue(nonNullText(state.rainLevelText));
     cacheQuery.addBindValue(state.temperature);
     cacheQuery.addBindValue(state.humidity);
     cacheQuery.addBindValue(state.pressure);
@@ -391,7 +396,7 @@ void SQLiteCache::upsertDeviceState(const DeviceState &state)
     cacheQuery.addBindValue(state.co2);
     cacheQuery.addBindValue(state.tvoc);
     cacheQuery.addBindValue(state.ch2o);
-    cacheQuery.addBindValue(state.timestamp);
+    cacheQuery.addBindValue(nonNullText(state.timestamp));
     cacheQuery.addBindValue(state.activeAlarmCount);
 
     if (!cacheQuery.exec())
@@ -836,6 +841,16 @@ void SQLiteCache::setLastError(const QString &message)
     }
 
     m_lastError = message;
+    if (!message.isEmpty() && openIfNeeded())
+    {
+        QSqlQuery query(m_database);
+        query.prepare(QStringLiteral(
+            "INSERT INTO app_settings(key, value) VALUES(?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
+        query.addBindValue(QStringLiteral("debug.sqlite.lastError"));
+        query.addBindValue(message);
+        query.exec();
+    }
     emit lastErrorChanged();
 }
 

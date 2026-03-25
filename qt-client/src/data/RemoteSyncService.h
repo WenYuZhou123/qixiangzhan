@@ -86,6 +86,7 @@ private:
                           bool dropRemoteHistory = false);
     void applyDeviceFromJson(const QJsonObject &object);
     void applyAlarmCacheCounts();
+    void updateDebugSnapshot() const;
     void restartRealtimeSocket();
     void handleRealtimeTextMessage(const QString &message);
 

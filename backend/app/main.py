@@ -48,6 +48,7 @@ from .services import (
     device_alarm_count_subquery,
     device_ids_for_user,
     replace_user_memberships,
+    retry_pending_command_requests,
     serialize_device,
     serialize_user,
     user_can_access_device,
@@ -77,11 +78,32 @@ def ensure_device_access(db: Session, user: User, device_id: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    stop_event = asyncio.Event()
+    retry_tracker: dict[str, tuple[int, object]] = {}
+
+    async def command_retry_worker() -> None:
+        while not stop_event.is_set():
+            try:
+                with SessionLocal() as db:
+                    retry_pending_command_requests(
+                        db,
+                        publish=bridge.publish,
+                        retry_tracker=retry_tracker,
+                    )
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Pending command retry loop failed: %s", exc)
+
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+
     ensure_runtime_schema()
     with SessionLocal() as db:
         seed_admin_user(db)
 
     realtime_hub.attach_loop(asyncio.get_running_loop())
+    retry_task = asyncio.create_task(command_retry_worker())
 
     try:
         bridge.start()
@@ -91,6 +113,12 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        stop_event.set()
+        retry_task.cancel()
+        try:
+            await retry_task
+        except asyncio.CancelledError:
+            pass
         try:
             bridge.stop()
         except Exception as exc:  # pragma: no cover

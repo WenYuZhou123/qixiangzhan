@@ -1,30 +1,60 @@
 import QtQuick
 
 QtObject {
-    readonly property color shellTop: "#0b1722"
-    readonly property color shellMid: "#132634"
-    readonly property color shellBottom: "#304451"
-    readonly property color glassStrong: "#e6edf1"
-    readonly property color glassSoft: "#f6fafc"
-    readonly property color glassTint: "#2b4154"
+    readonly property color shellTop: "#0c1823"
+    readonly property color shellMid: "#132a39"
+    readonly property color shellBottom: "#2a4352"
+    readonly property color pageSurface: "#edf3f5"
+    readonly property color surfacePrimary: "#fbfdfe"
+    readonly property color surfaceSecondary: "#f2f7f9"
+    readonly property color surfaceTint: "#dfeaf0"
+    readonly property color glassStrong: "#eef4f6"
+    readonly property color glassSoft: "#f7fbfc"
     readonly property color borderStrong: "#6b8798"
-    readonly property color borderSoft: "#c8d5dd"
-    readonly property color textPrimary: "#f3f1eb"
-    readonly property color textBody: "#162b39"
-    readonly property color textMuted: "#6b7d8a"
-    readonly property color accentCyan: "#78bfd0"
-    readonly property color accentCyanDeep: "#2c5b70"
-    readonly property color accentOrange: "#c98f5c"
-    readonly property color accentOrangeSoft: "#ead9ca"
-    readonly property color success: "#597f77"
-    readonly property color warning: "#9d754f"
-    readonly property color danger: "#8c5f66"
-    readonly property color neutral: "#d5dee3"
-    readonly property color pageSurface: "#eef3f5"
+    readonly property color borderSoft: "#cad7df"
+    readonly property color textPrimary: "#f2f6f8"
+    readonly property color textBody: "#17303f"
+    readonly property color textMuted: "#67808f"
+    readonly property color accentCyan: "#7bc1cf"
+    readonly property color accentCyanDeep: "#295b6d"
+    readonly property color accentOrange: "#c8915f"
+    readonly property color accentSand: "#ead9ca"
+    readonly property color success: "#4e7d72"
+    readonly property color warning: "#9b754f"
+    readonly property color danger: "#8d5d64"
+    readonly property color neutral: "#d7e1e6"
+
+    readonly property int breakpointCompact: 420
+    readonly property int breakpointTablet: 600
+    readonly property int touchTarget: 50
+    readonly property int pageMarginMobile: 14
+    readonly property int pageMarginDesktop: 18
+    readonly property int cardGap: 12
+    readonly property int sectionGap: 14
 
     readonly property real radiusLarge: 30
     readonly property real radiusMedium: 22
     readonly property real radiusSmall: 16
+
+    function heroTitleSize(mobile) {
+        return mobile ? 28 : 36
+    }
+
+    function pageTitleSize(mobile) {
+        return mobile ? 24 : 22
+    }
+
+    function bodySize(mobile) {
+        return mobile ? 14 : 13
+    }
+
+    function labelSize(mobile) {
+        return mobile ? 13 : 12
+    }
+
+    function actionSize(mobile) {
+        return mobile ? 16 : 14
+    }
 
     function stateColor(state) {
         switch (state) {
@@ -39,7 +69,7 @@ QtObject {
         case "fault":
             return danger
         default:
-            return "#627786"
+            return "#617c8a"
         }
     }
 
@@ -47,24 +77,38 @@ QtObject {
         return ready ? success : warning
     }
 
+    function relayStateText(enabled) {
+        return enabled ? "开启" : "关闭"
+    }
+
     function occupancyText(occupied) {
-        return occupied ? "已占位" : "空闲"
+        return occupied ? "占用" : "空闲"
     }
 
     function connectionStateText(state) {
         switch (state) {
         case "Connected":
-            return "已连接"
+        case "Cloud Live":
+            return "实时在线"
         case "Connecting":
             return "连接中"
         case "Disconnected":
             return "未连接"
-        case "API idle":
-            return "接口空闲"
+        case "Cloud Ready":
+        case "Remote ready":
+            return "接口就绪"
+        case "Cloud Fallback":
         case "Polling":
             return "轮询同步"
-        case "Remote ready":
-            return "远程就绪"
+        case "Cloud Error":
+            return "接口异常"
+        case "Cloud Parse Error":
+            return "响应解析错误"
+        case "Authentication Required":
+            return "需要登录"
+        case "API idle":
+            return "接口空闲"
+        case "Guest Preview":
         case "游客预览":
             return "游客预览"
         default:
@@ -79,7 +123,7 @@ QtObject {
         case "guest":
             return "游客"
         case "operator":
-            return "值守员"
+            return "操作员"
         case "maintenance":
             return "维护员"
         default:
@@ -87,10 +131,14 @@ QtObject {
         }
     }
 
+    function protocolText(profile) {
+        return profile === "airport_pad_v1" ? "停机坪协议" : "继电器协议"
+    }
+
     function padStateText(state) {
         switch (state) {
         case "open":
-            return "已打开"
+            return "已开启"
         case "opening":
             return "开启中"
         case "closed":

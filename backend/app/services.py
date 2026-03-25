@@ -310,12 +310,49 @@ def command_matches_status(command_row: CommandMessage, payload_map: dict[str, A
     return False
 
 
+def status_snapshot_is_fresh(device: Device, payload_map: dict[str, Any]) -> bool:
+    incoming_tick = coerce_int(payload_map.get("tick"), device.tick)
+    if incoming_tick != device.tick:
+        return True
+
+    incoming_online = coerce_bool(payload_map.get("online"), device.online)
+    if incoming_online != device.online:
+        return True
+
+    incoming_rssi = coerce_int(payload_map.get("rssi"), device.rssi)
+    if incoming_rssi != device.rssi:
+        return True
+
+    if str(payload_map.get("ip") or device.ip) != device.ip:
+        return True
+    if str(payload_map.get("state") or device.state_text) != device.state_text:
+        return True
+
+    relay1 = coerce_bool(payload_map.get("relay1"), device.relay1)
+    relay2 = coerce_bool(payload_map.get("relay2"), device.relay2)
+    if relay1 != device.relay1 or relay2 != device.relay2:
+        return True
+
+    pad = extract_pad_summary(payload_map)
+    if (
+        pad["left_state"] != device.pad_left_state
+        or pad["right_state"] != device.pad_right_state
+        or pad["ready"] != device.pad_ready
+        or pad["occupied"] != device.pad_occupied
+        or pad["mode"] != device.pad_mode
+    ):
+        return True
+
+    return False
+
+
 def resolve_pending_commands_from_status(
     db: Session,
     *,
     device_id: str,
     payload_map: dict[str, Any],
     now: datetime,
+    fresh_status: bool,
 ) -> list[CommandMessage]:
     pending_rows = db.scalars(
         select(CommandMessage)
@@ -330,6 +367,12 @@ def resolve_pending_commands_from_status(
 
     resolved: list[CommandMessage] = []
     for row in pending_rows:
+        if row.command in {"query_status", "query_pad_status"}:
+            if not fresh_status:
+                continue
+        elif not fresh_status:
+            continue
+
         if not command_matches_status(row, payload_map):
             continue
         row.status = "success"
@@ -729,6 +772,7 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
             command_row.status = "pending"
 
     if topic_kind == "status":
+        fresh_status = status_snapshot_is_fresh(device, payload_map)
         pad = extract_pad_summary(payload_map)
         weather = extract_weather_summary(payload_map)
         device.display_name = str(payload_map.get("display_name") or device.display_name or device_id)
@@ -777,6 +821,7 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
             device_id=device_id,
             payload_map=payload_map,
             now=now,
+            fresh_status=fresh_status,
         )
 
         if 0 < device.rssi < 10:
@@ -921,6 +966,67 @@ def create_command_request(
     db.refresh(command_row)
     emit_device_events(db, device_id, command_row=command_row)
     return command_row
+
+
+def retry_pending_command_requests(
+    db: Session,
+    *,
+    publish: Callable[[str, bytes | str], tuple[bool, str]],
+    retry_tracker: dict[str, tuple[int, datetime]],
+    min_retry_age_seconds: int = 2,
+    retry_spacing_seconds: int = 2,
+    max_attempts: int = 2,
+) -> list[str]:
+    now = utcnow()
+    eligible_before = naive_utc(now - timedelta(seconds=min_retry_age_seconds))
+    retried_device_ids: list[str] = []
+
+    pending_rows = db.scalars(
+        select(CommandMessage)
+        .where(
+            CommandMessage.direction == "down",
+            CommandMessage.acked_at.is_(None),
+            CommandMessage.status.in_(("pending", "queued", "sent")),
+            CommandMessage.created_at <= eligible_before,
+        )
+        .order_by(CommandMessage.created_at.asc())
+    ).all()
+
+    active_keys = {row.msg_id or f"id:{row.id}" for row in pending_rows}
+    stale_keys = [key for key in retry_tracker.keys() if key not in active_keys]
+    for key in stale_keys:
+        retry_tracker.pop(key, None)
+
+    for row in pending_rows:
+        tracker_key = row.msg_id or f"id:{row.id}"
+        attempts, last_retry_at = retry_tracker.get(tracker_key, (0, datetime.min.replace(tzinfo=timezone.utc)))
+        if attempts >= max_attempts:
+            continue
+        if (now - last_retry_at).total_seconds() < retry_spacing_seconds:
+            continue
+
+        if isinstance(row.payload, dict):
+            encoded_payload = json.dumps(row.payload, ensure_ascii=False, separators=(",", ":"))
+        else:
+            encoded_payload = str(row.payload or "")
+        if not encoded_payload or not row.topic:
+            continue
+
+        ok, detail = publish(row.topic, encoded_payload)
+        retry_tracker[tracker_key] = (attempts + 1, now)
+        if ok:
+            row.detail = f"Retry publish {attempts + 1}/{max_attempts}"
+            retried_device_ids.append(row.device_id)
+        else:
+            row.detail = detail or f"Retry publish {attempts + 1}/{max_attempts} failed"
+
+    if not pending_rows:
+        return []
+
+    db.commit()
+    for device_id in sorted(set(retried_device_ids)):
+        emit_device_events(db, device_id)
+    return retried_device_ids
 
 
 def apply_offline_rules(db: Session, *, commit: bool = True) -> None:

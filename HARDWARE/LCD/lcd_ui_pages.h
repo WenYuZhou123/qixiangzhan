@@ -13,5 +13,6 @@
 #define LCD_UI_TAB_GAP        8U
 
 void LCD_UI_RenderPage(LCD_Page_t page, const LCD_UI_Model_t *model);
+LCD_ControlAction_t LCD_UI_ControlHitTest(uint16_t x, uint16_t y);
 
 #endif

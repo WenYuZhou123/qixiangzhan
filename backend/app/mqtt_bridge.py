@@ -1,6 +1,7 @@
 import ssl
-from collections.abc import Callable
 import logging
+import os
+import socket
 
 import paho.mqtt.client as mqtt
 
@@ -9,11 +10,13 @@ from .database import SessionLocal
 from .services import record_message
 
 logger = logging.getLogger(__name__)
+MQTT_PUBLISH_WAIT_TIMEOUT_SEC = 2.0
 
 
 class EmqxBridge:
     def __init__(self) -> None:
-        self._client = mqtt.Client(client_id="qixiangzhan-backend", protocol=mqtt.MQTTv311)
+        client_id = f"qixiangzhan-backend-{socket.gethostname()}-{os.getpid()}"
+        self._client = mqtt.Client(client_id=client_id, clean_session=True, protocol=mqtt.MQTTv311)
         self._connected = False
         self._client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
         if settings.mqtt_use_tls:
@@ -52,7 +55,15 @@ class EmqxBridge:
         message = payload.encode("utf-8") if isinstance(payload, str) else payload
         info = self._client.publish(topic, message, qos=qos, retain=retain)
         if info.rc == mqtt.MQTT_ERR_SUCCESS:
-            return True, ""
+            try:
+                info.wait_for_publish(timeout=MQTT_PUBLISH_WAIT_TIMEOUT_SEC)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("MQTT wait_for_publish failed: %s", exc)
+                return False, str(exc)
+
+            if info.is_published():
+                return True, ""
+            return False, "MQTT publish timeout"
         return False, mqtt.error_string(info.rc)
 
     def _on_connect(self, client: mqtt.Client, userdata: object, flags: dict, rc: int, properties: object = None) -> None:
@@ -82,5 +93,8 @@ class EmqxBridge:
         logger.warning("MQTT bridge unexpected disconnect: rc=%s", rc)
 
     def _on_message(self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage) -> None:
-        with SessionLocal() as session:
-            record_message(session, msg.topic, msg.payload)
+        try:
+            with SessionLocal() as session:
+                record_message(session, msg.topic, msg.payload)
+        except Exception:  # pragma: no cover
+            logger.exception("MQTT bridge failed to record message: topic=%s", msg.topic)

@@ -26,6 +26,11 @@ QString secureStorageWarning()
 {
     return QStringLiteral("Secure storage is unavailable. This login will not be remembered.");
 }
+
+QString legacyStoreWarning()
+{
+    return QStringLiteral("Secure storage is unavailable. Session tokens are temporarily stored in the local cache for this device.");
+}
 }
 
 AuthSession::AuthSession(SQLiteCache *cache, QObject *parent)
@@ -410,12 +415,22 @@ void AuthSession::persistSessionSecrets()
     QString errorMessage;
     if (!m_secureStore->saveSession(m_apiBaseUrl, m_session, &errorMessage))
     {
-        setLastError(errorMessage.isEmpty() ? secureStorageWarning() : secureStorageWarning() + QLatin1Char(' ') + errorMessage);
+        if (m_cache != nullptr)
+        {
+            m_cache->setSetting(QStringLiteral("auth.token"), m_session.token);
+            m_cache->setSetting(QStringLiteral("auth.refreshToken"), m_session.refreshToken);
+            m_cache->setSetting(QStringLiteral("auth.accessExpiresAt"), m_session.accessExpiresAt);
+            m_cache->setSetting(QStringLiteral("auth.refreshExpiresAt"), m_session.refreshExpiresAt);
+        }
+        setLastError(errorMessage.isEmpty() ? legacyStoreWarning() : legacyStoreWarning() + QLatin1Char(' ') + errorMessage);
         return;
     }
 
     clearLegacySecretCache();
-    if (m_lastError == secureStorageWarning() || m_lastError.startsWith(secureStorageWarning() + QLatin1Char(' ')))
+    if (m_lastError == secureStorageWarning() ||
+        m_lastError.startsWith(secureStorageWarning() + QLatin1Char(' ')) ||
+        m_lastError == legacyStoreWarning() ||
+        m_lastError.startsWith(legacyStoreWarning() + QLatin1Char(' ')))
     {
         setLastError(QString());
     }
@@ -460,6 +475,26 @@ void AuthSession::loadSecureSession()
         return;
     }
 
+    if (m_cache != nullptr)
+    {
+        const QString legacyToken = m_cache->setting(QStringLiteral("auth.token"));
+        const QString legacyRefresh = m_cache->setting(QStringLiteral("auth.refreshToken"));
+        const QString legacyAccessExpires = m_cache->setting(QStringLiteral("auth.accessExpiresAt"));
+        const QString legacyRefreshExpires = m_cache->setting(QStringLiteral("auth.refreshExpiresAt"));
+        if (!legacyToken.isEmpty() || !legacyRefresh.isEmpty())
+        {
+            m_session.token = legacyToken;
+            m_session.refreshToken = legacyRefresh;
+            m_session.accessExpiresAt = legacyAccessExpires;
+            m_session.refreshExpiresAt = legacyRefreshExpires;
+            if (!loaded.errorMessage.isEmpty())
+            {
+                setLastError(legacyStoreWarning() + QLatin1Char(' ') + loaded.errorMessage);
+            }
+            return;
+        }
+    }
+
     if (!loaded.errorMessage.isEmpty())
     {
         setLastError(secureStorageWarning() + QLatin1Char(' ') + loaded.errorMessage);
@@ -493,6 +528,7 @@ void AuthSession::migrateLegacySecretCache()
         m_session.accessExpiresAt = legacySession.accessExpiresAt;
         m_session.refreshExpiresAt = legacySession.refreshExpiresAt;
         setLastError(errorMessage.isEmpty() ? secureStorageWarning() : secureStorageWarning() + QLatin1Char(' ') + errorMessage);
+        return;
     }
 
     clearLegacySecretCache();

@@ -10,7 +10,7 @@ ApplicationWindow {
     minimumWidth: 1180
     minimumHeight: 760
     visible: true
-    title: "机场任务终端"
+    title: "气象站任务终端"
     font.family: Qt.platform.os === "android" ? "Noto Sans CJK SC" : "Microsoft YaHei UI"
 
     TaskTheme { id: theme }
@@ -20,8 +20,8 @@ ApplicationWindow {
 
     property string currentPage: "overview"
     property var navItems: [
-        { key: "overview", label: "总览", badge: "OV" },
-        { key: "pad", label: "停机场", badge: "PD" },
+        { key: "overview", label: "概览", badge: "OV" },
+        { key: "pad", label: "控制", badge: "CT" },
         { key: "weather", label: "气象", badge: "WX" },
         { key: "history", label: "历史", badge: "HS" },
         { key: "alarms", label: "告警", badge: "AL" },
@@ -33,16 +33,14 @@ ApplicationWindow {
         { key: "login", label: "登录", badge: "AU" }
     ]
     property var mobileNavItems: [
-        { key: "overview", label: "总览", badge: "OV" },
-        { key: "pad", label: "停机场", badge: "PD" },
+        { key: "overview", label: "概览", badge: "OV" },
+        { key: "pad", label: "控制", badge: "CT" },
         { key: "weather", label: "气象", badge: "WX" },
-        { key: "history", label: "历史", badge: "HS" },
         { key: "settings", label: "设置", badge: "CF" }
     ]
     property var mobileNavItemsLoggedOut: [
         { key: "login", label: "登录", badge: "AU" },
-        { key: "overview", label: "总览", badge: "OV" },
-        { key: "pad", label: "停机场", badge: "PD" },
+        { key: "overview", label: "概览", badge: "OV" },
         { key: "weather", label: "气象", badge: "WX" },
         { key: "settings", label: "设置", badge: "CF" }
     ]
@@ -90,24 +88,32 @@ ApplicationWindow {
 
     function authChipText() {
         if (appController.authSession.guestMode)
-            return "游客模式"
-        if (appController.authSession.authenticated)
-            return appController.authSession.displayName.length > 0
-                   ? appController.authSession.displayName
-                   : "已登录"
+            return "游客预览"
+        if (appController.authSession.authenticated) {
+            if (appController.authSession.displayName.length > 0)
+                return appController.authSession.displayName
+            return appController.authSession.username
+        }
         return "未登录"
     }
 
     function statusChipText() {
-        if (appController.authSession.guestMode)
-            return "预览"
-        return appController.runtimeConnected ? "在线" : "离线"
+        return theme.connectionStateText(appController.runtimeConnectionState)
     }
 
     function statusChipColor() {
         if (appController.authSession.guestMode)
             return theme.warning
         return appController.runtimeConnected ? theme.success : theme.danger
+    }
+
+    function clampPageForCurrentMode() {
+        if (!androidMode)
+            return
+
+        const desktopOnlyPages = ["history", "alarms", "users", "engineering", "serial", "logs"]
+        if (desktopOnlyPages.indexOf(currentPage) >= 0)
+            currentPage = "overview"
     }
 
     Component.onCompleted: {
@@ -123,6 +129,7 @@ ApplicationWindow {
             currentPage = "overview"
         if (currentPage === "users" && !appController.authSession.admin)
             currentPage = "overview"
+        clampPageForCurrentMode()
         appController.currentPage = currentPage
     }
 
@@ -157,25 +164,25 @@ ApplicationWindow {
         Rectangle {
             width: parent.width * 0.34
             height: parent.height * 0.2
-            x: parent.width * 0.44
+            x: parent.width * 0.46
             y: -height * 0.25
             radius: width / 2
             color: "#24d6e5ed"
         }
 
         Rectangle {
-            width: parent.width * 0.48
-            height: parent.height * 0.22
-            x: -width * 0.18
-            y: parent.height * 0.72
+            width: parent.width * 0.46
+            height: parent.height * 0.24
+            x: -width * 0.16
+            y: parent.height * 0.74
             radius: height / 2
             rotation: -4
-            color: "#1fd6c8b3"
+            color: "#20d5c8b2"
         }
     }
 
     header: Rectangle {
-        implicitHeight: androidMode ? 108 : 132
+        implicitHeight: androidMode ? 110 : 126
         gradient: Gradient {
             GradientStop { position: 0.0; color: theme.shellTop }
             GradientStop { position: 0.6; color: theme.shellMid }
@@ -188,41 +195,40 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.leftMargin: androidMode ? 14 : 24
             anchors.rightMargin: androidMode ? 14 : 24
-            anchors.topMargin: androidMode ? 10 : 18
+            anchors.topMargin: androidMode ? 10 : 16
             anchors.bottomMargin: androidMode ? 10 : 14
-            spacing: androidMode ? 8 : 12
+            spacing: androidMode ? 8 : 10
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: androidMode ? 8 : 12
+                spacing: 10
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 2
 
                     Label {
-                        text: "机场任务终端"
+                        text: "气象站任务终端"
                         color: theme.textPrimary
-                        font.pixelSize: androidMode ? 18 : 30
+                        font.pixelSize: androidMode ? 20 : 30
                         font.bold: true
                         elide: Text.ElideRight
                     }
 
                     Label {
                         text: androidMode
-                              ? "高原气象 / 停机场联动 / 无人机预留"
-                              : "高原气象监测 / 停机场联动 / 无人机任务预留"
+                              ? "统一概览、控制、气象与设置"
+                              : "航空控制台风格，统一桌面、安卓与本地屏交互语言"
                         color: "#c7d6df"
-                        font.pixelSize: androidMode ? 10 : 14
+                        font.pixelSize: androidMode ? 11 : 14
                         elide: Text.ElideRight
                     }
                 }
 
                 Rectangle {
-                    id: authChip
                     radius: androidMode ? 18 : 22
-                    Layout.preferredWidth: androidMode ? 118 : 240
-                    Layout.preferredHeight: androidMode ? 40 : 46
+                    Layout.preferredWidth: androidMode ? 122 : 228
+                    Layout.preferredHeight: theme.touchTarget
                     color: appController.authSession.authenticated ? "#274e60" : "#314c5a"
                     border.color: appController.authSession.authenticated ? theme.accentCyan : theme.borderStrong
                     border.width: 1
@@ -246,18 +252,21 @@ ApplicationWindow {
 
                 Rectangle {
                     radius: androidMode ? 18 : 22
-                    Layout.preferredWidth: androidMode ? 84 : 148
-                    Layout.preferredHeight: androidMode ? 40 : 46
+                    Layout.preferredWidth: androidMode ? 104 : 150
+                    Layout.preferredHeight: theme.touchTarget
                     color: window.statusChipColor()
                     border.color: appController.runtimeConnected ? "#a7c7bd" : "#d7b0b6"
                     border.width: 1
 
                     Label {
                         anchors.centerIn: parent
+                        width: parent.width - 18
                         text: window.statusChipText()
                         color: "white"
                         font.pixelSize: androidMode ? 13 : 15
                         font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
                     }
                 }
             }
@@ -307,7 +316,7 @@ ApplicationWindow {
                         Rectangle {
                             anchors.fill: parent
                             radius: 18
-                            color: active ? "#eef4f6" : "#10223342"
+                            color: active ? theme.glassStrong : "#10223342"
                             border.color: active ? theme.accentCyan : "#3b5b6f"
                             border.width: 1
                             opacity: navTap.pressed ? 0.9 : 1.0
@@ -375,7 +384,7 @@ ApplicationWindow {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 16
-                spacing: 10
+                spacing: 12
 
                 ColumnLayout {
                     spacing: 2
@@ -388,7 +397,7 @@ ApplicationWindow {
                     }
 
                     Label {
-                        text: "高原机场联动控制"
+                        text: "核心界面统一，扩展页面保留"
                         color: "#b7cad6"
                         font.pixelSize: 12
                     }
@@ -463,7 +472,7 @@ ApplicationWindow {
                     color: "#14000000"
                     border.color: "#3f5f72"
                     border.width: 1
-                    implicitHeight: 138
+                    implicitHeight: 140
 
                     Column {
                         anchors.fill: parent
@@ -471,7 +480,7 @@ ApplicationWindow {
                         spacing: 8
 
                         Label {
-                            text: appController.engineeringMode ? "工程模式已启用" : "远程任务模式"
+                            text: appController.engineeringMode ? "工程模式已启用" : "远程控制模式"
                             color: theme.textPrimary
                             font.pixelSize: 16
                             font.bold: true
@@ -480,8 +489,8 @@ ApplicationWindow {
                         Label {
                             width: parent.width
                             text: appController.engineeringMode
-                                  ? "桌面端保留本地 MQTT、继电器与串口调试能力。"
-                                  : "普通运行优先走云端接口与远程同步。"
+                                  ? "桌面端保留串口、本地 MQTT 和低层联调能力，安卓与核心页面继续走统一 API。"
+                                  : "当前优先使用局域网 API 和实时同步，适合桌面值守与手机控制。"
                             wrapMode: Text.Wrap
                             color: "#bfd1dc"
                             font.pixelSize: 12
@@ -514,7 +523,7 @@ ApplicationWindow {
                 currentIndex: window.pageIndex()
 
                 DeviceOverviewPage { controller: appController }
-                DevicePage { controller: appController }
+                ControlPage { controller: appController }
                 WeatherPage { controller: appController }
                 CommandHistoryPage { controller: appController }
                 AlarmCenterPage { controller: appController }

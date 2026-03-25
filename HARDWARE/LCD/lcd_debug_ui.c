@@ -6,7 +6,9 @@
 #include "lcd_touch.h"
 #include "lcd_ui_model.h"
 #include "lcd_ui_pages.h"
+#include "relay.h"
 #include "usart.h"
+
 #include <string.h>
 
 static LCD_Page_t s_page = LCD_PAGE_OVERVIEW;
@@ -21,9 +23,18 @@ static App_DeviceStatus_t s_last_status;
 static uint8_t s_touch_active = 0U;
 static uint16_t s_touch_start_x = 0U;
 static uint16_t s_touch_start_y = 0U;
+static uint16_t s_touch_last_x = 0U;
+static uint16_t s_touch_last_y = 0U;
+static uint32_t s_touch_debounce_until = 0U;
+static uint32_t s_control_busy_until = 0U;
+static uint8_t s_last_control_busy = 0U;
+static char s_control_message[APP_STATUS_TEXT_LEN];
+static char s_last_control_message[APP_STATUS_TEXT_LEN];
 
 #define LCD_TOUCH_SWIPE_THRESHOLD     60U
 #define LCD_TOUCH_TAP_THRESHOLD       20U
+#define LCD_TOUCH_DEBOUNCE_MS         180U
+#define LCD_CONTROL_BUSY_MS           320U
 
 static void lcd_diag_print(const char *text)
 {
@@ -51,9 +62,60 @@ static uint8_t lcd_text_changed(const char *a, const char *b)
     return (uint8_t)((strcmp(a, b) != 0) ? 1U : 0U);
 }
 
-static uint16_t lcd_abs_diff_u16_simple(uint16_t a, uint16_t b)
+static void lcd_copy_text(char *dst, const char *src, uint32_t size)
 {
-    return (a >= b) ? (uint16_t)(a - b) : (uint16_t)(b - a);
+    if ((dst == 0) || (size == 0U))
+    {
+        return;
+    }
+
+    if (src == 0)
+    {
+        dst[0] = '\0';
+        return;
+    }
+
+    strncpy(dst, src, size - 1U);
+    dst[size - 1U] = '\0';
+}
+
+static uint8_t lcd_control_is_busy(void)
+{
+    return (uint8_t)((HAL_GetTick() < s_control_busy_until) ? 1U : 0U);
+}
+
+static void lcd_set_control_feedback(const char *message, uint8_t start_busy)
+{
+    uint32_t now = HAL_GetTick();
+
+    lcd_copy_text(s_control_message, message, sizeof(s_control_message));
+    if (start_busy != 0U)
+    {
+        s_control_busy_until = now + LCD_CONTROL_BUSY_MS;
+    }
+    else if (now >= s_control_busy_until)
+    {
+        s_control_busy_until = 0U;
+    }
+    s_force_render = 1U;
+}
+
+static uint8_t lcd_control_feedback_changed(void)
+{
+    uint8_t current_busy = lcd_control_is_busy();
+
+    if (current_busy != s_last_control_busy)
+    {
+        return 1U;
+    }
+
+    return lcd_text_changed(s_control_message, s_last_control_message);
+}
+
+static void lcd_snapshot_control_feedback(void)
+{
+    s_last_control_busy = lcd_control_is_busy();
+    lcd_copy_text(s_last_control_message, s_control_message, sizeof(s_last_control_message));
 }
 
 static void lcd_change_page_relative(int8_t delta)
@@ -99,6 +161,69 @@ static uint8_t lcd_try_select_page_tab(uint16_t x, uint16_t y)
     return 0U;
 }
 
+static void lcd_execute_control_action(LCD_ControlAction_t action)
+{
+    uint32_t now = HAL_GetTick();
+
+    if (action == LCD_CONTROL_ACTION_NONE)
+    {
+        return;
+    }
+
+    if (now < s_touch_debounce_until)
+    {
+        return;
+    }
+
+    s_touch_debounce_until = now + LCD_TOUCH_DEBOUNCE_MS;
+    if ((lcd_control_is_busy() != 0U) && (action != LCD_CONTROL_ACTION_QUERY_STATUS))
+    {
+        lcd_set_control_feedback("WAIT FOR CURRENT ACTION", 0U);
+        return;
+    }
+
+    switch (action)
+    {
+    case LCD_CONTROL_ACTION_R1_ON:
+        Relay_On(RELAY1);
+        lcd_set_control_feedback("R1 TURNED ON", 1U);
+        break;
+
+    case LCD_CONTROL_ACTION_R1_OFF:
+        Relay_Off(RELAY1);
+        lcd_set_control_feedback("R1 TURNED OFF", 1U);
+        break;
+
+    case LCD_CONTROL_ACTION_R2_ON:
+        Relay_On(RELAY2);
+        lcd_set_control_feedback("R2 TURNED ON", 1U);
+        break;
+
+    case LCD_CONTROL_ACTION_R2_OFF:
+        Relay_Off(RELAY2);
+        lcd_set_control_feedback("R2 TURNED OFF", 1U);
+        break;
+
+    case LCD_CONTROL_ACTION_ALL_ON:
+        Relay_AllOn();
+        lcd_set_control_feedback("ALL RELAYS ON", 1U);
+        break;
+
+    case LCD_CONTROL_ACTION_ALL_OFF:
+        Relay_AllOff();
+        lcd_set_control_feedback("ALL RELAYS OFF", 1U);
+        break;
+
+    case LCD_CONTROL_ACTION_QUERY_STATUS:
+        lcd_set_control_feedback("STATUS REFRESHED", 0U);
+        break;
+
+    case LCD_CONTROL_ACTION_NONE:
+    default:
+        break;
+    }
+}
+
 static void lcd_handle_touch_navigation(void)
 {
     LCD_TouchState_t touch_state;
@@ -113,6 +238,8 @@ static void lcd_handle_touch_navigation(void)
             s_touch_start_x = touch_state.x;
             s_touch_start_y = touch_state.y;
         }
+        s_touch_last_x = touch_state.x;
+        s_touch_last_y = touch_state.y;
         return;
     }
 
@@ -121,19 +248,27 @@ static void lcd_handle_touch_navigation(void)
         return;
     }
 
-    dx = lcd_abs_diff_u16_simple(s_touch_start_x, touch_state.x);
-    dy = lcd_abs_diff_u16_simple(s_touch_start_y, touch_state.y);
+    dx = lcd_abs_diff_u16(s_touch_start_x, s_touch_last_x);
+    dy = lcd_abs_diff_u16(s_touch_start_y, s_touch_last_y);
     s_touch_active = 0U;
 
     if (dx <= LCD_TOUCH_TAP_THRESHOLD && dy <= LCD_TOUCH_TAP_THRESHOLD)
     {
-        (void)lcd_try_select_page_tab(s_touch_start_x, s_touch_start_y);
+        if (lcd_try_select_page_tab(s_touch_start_x, s_touch_start_y) != 0U)
+        {
+            return;
+        }
+
+        if (s_page == LCD_PAGE_CONTROL)
+        {
+            lcd_execute_control_action(LCD_UI_ControlHitTest(s_touch_start_x, s_touch_start_y));
+        }
         return;
     }
 
     if (dx >= LCD_TOUCH_SWIPE_THRESHOLD && dx > dy)
     {
-        if (touch_state.x > s_touch_start_x)
+        if (s_touch_last_x > s_touch_start_x)
         {
             lcd_change_page_relative(-1);
         }
@@ -223,17 +358,31 @@ void LCD_DebugUI_Init(void)
     LCD_Touch_Init();
     LCD_Port_SetBacklight(100U);
     lcd_diag_print("[LCD] init ok\r\n");
+
     s_page = LCD_PAGE_OVERVIEW;
     s_last_refresh_tick = 0U;
     s_last_render_tick = 0U;
     s_refresh_count = 0U;
     s_force_render = 1U;
     s_has_last_status = 0U;
+    s_touch_active = 0U;
+    s_touch_start_x = 0U;
+    s_touch_start_y = 0U;
+    s_touch_last_x = 0U;
+    s_touch_last_y = 0U;
+    s_touch_debounce_until = 0U;
+    s_control_busy_until = 0U;
+    s_last_control_busy = 0U;
+    memset(&s_model, 0, sizeof(s_model));
+    memset(&s_last_status, 0, sizeof(s_last_status));
+    memset(s_last_control_message, 0, sizeof(s_last_control_message));
+    lcd_copy_text(s_control_message, "READY FOR CONTROL", sizeof(s_control_message));
 }
 
 void LCD_DebugUI_Task(void)
 {
     uint8_t key_pressed = Key_Scan();
+    uint8_t control_changed;
 
     lcd_handle_touch_navigation();
 
@@ -246,14 +395,18 @@ void LCD_DebugUI_Task(void)
     s_work_status.lcd_refresh_tick = s_last_render_tick;
     s_work_status.lcd_refresh_count = s_refresh_count;
 
+    control_changed = lcd_control_feedback_changed();
     if ((s_force_render == 0U) &&
         (s_has_last_status != 0U) &&
+        (control_changed == 0U) &&
         (lcd_status_changed(&s_work_status, &s_last_status) == 0U))
     {
         return;
     }
 
-    if ((s_force_render == 0U) && ((HAL_GetTick() - s_last_refresh_tick) < 800U))
+    if ((s_force_render == 0U) &&
+        (control_changed == 0U) &&
+        ((HAL_GetTick() - s_last_refresh_tick) < 800U))
     {
         return;
     }
@@ -263,11 +416,15 @@ void LCD_DebugUI_Task(void)
     s_refresh_count++;
     s_work_status.lcd_refresh_tick = s_last_render_tick;
     s_work_status.lcd_refresh_count = s_refresh_count;
+
     LCD_UI_ModelUpdate(&s_model, &s_work_status);
+    LCD_UI_ModelSetFeedback(&s_model, lcd_control_is_busy(), s_control_message);
     LCD_UI_RenderPage(s_page, &s_model);
+
     memcpy(&s_last_status, &s_work_status, sizeof(s_last_status));
     s_has_last_status = 1U;
     s_force_render = 0U;
+    lcd_snapshot_control_feedback();
 }
 
 uint32_t LCD_DebugUI_GetRefreshTick(void)

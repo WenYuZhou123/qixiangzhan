@@ -18,12 +18,12 @@ ScrollView {
         color: "#ffffff"
         border.color: theme.borderSoft
         border.width: 1
-        implicitHeight: body.implicitHeight + 44
+        implicitHeight: cardBody.implicitHeight + 44
 
-        default property alias cardData: body.data
+        default property alias cardData: cardBody.data
 
         ColumnLayout {
-            id: body
+            id: cardBody
             anchors.fill: parent
             anchors.margins: 18
             spacing: 12
@@ -31,7 +31,7 @@ ScrollView {
             Label {
                 text: parent.parent.title
                 color: theme.textBody
-                font.pixelSize: root.mobile ? 24 : 22
+                font.pixelSize: mobile ? 24 : 22
                 font.bold: true
             }
 
@@ -39,7 +39,7 @@ ScrollView {
                 text: parent.parent.subtitle
                 color: theme.textMuted
                 wrapMode: Text.Wrap
-                font.pixelSize: root.mobile ? 16 : 13
+                font.pixelSize: mobile ? 16 : 13
             }
         }
     }
@@ -48,17 +48,17 @@ ScrollView {
         required property string label
         required property string value
         Layout.fillWidth: true
-        implicitHeight: infoColumn.implicitHeight
+        implicitHeight: rowBody.implicitHeight
 
         Column {
-            id: infoColumn
+            id: rowBody
             width: parent.width
             spacing: 4
 
             Label {
                 text: parent.parent.label
                 color: theme.textMuted
-                font.pixelSize: root.mobile ? 15 : 12
+                font.pixelSize: mobile ? 15 : 12
             }
 
             Label {
@@ -66,7 +66,7 @@ ScrollView {
                 text: parent.parent.value
                 wrapMode: Text.WrapAnywhere
                 color: theme.textBody
-                font.pixelSize: root.mobile ? 18 : 16
+                font.pixelSize: mobile ? 18 : 16
                 font.bold: true
             }
         }
@@ -74,18 +74,12 @@ ScrollView {
 
     ColumnLayout {
         width: root.availableWidth
-        spacing: 16
-
-        ConnectionPage {
-            Layout.fillWidth: true
-            gateway: root.controller.realtimeGateway
-            visible: !root.controller.androidMode && root.controller.engineeringMode
-        }
+        spacing: theme.sectionGap
 
         Rectangle {
             Layout.fillWidth: true
             radius: 30
-            implicitHeight: mobile ? 196 : 188
+            implicitHeight: mobile ? 212 : 194
             gradient: Gradient {
                 GradientStop { position: 0.0; color: "#0d1f2f" }
                 GradientStop { position: 0.55; color: "#16384f" }
@@ -107,7 +101,7 @@ ScrollView {
                 }
 
                 Label {
-                    text: "远程接入、缓存策略与工程模式开关都在这里统一管理。"
+                    text: "桌面和安卓都使用同一套 API Base 配置。移动端默认按局域网调试优先，公网地址继续保留为可切换选项。"
                     color: "#d0ddea"
                     wrapMode: Text.Wrap
                     font.pixelSize: mobile ? 15 : 14
@@ -170,102 +164,52 @@ ScrollView {
                         }
                     }
                 }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: mobile ? 1 : 2
-                    columnSpacing: 12
-                    rowSpacing: 12
-
-                    Button {
-                        Layout.fillWidth: true
-                        text: root.controller.authSession.authenticated ? "前往登录管理" : "前往登录"
-                        onClicked: root.controller.currentPage = "login"
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#102434"
-                            font: parent.font
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: 20
-                            color: "#dce7ec"
-                            border.color: "#c4d2da"
-                            border.width: 1
-                        }
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        visible: root.controller.authSession.authenticated
-                        enabled: root.controller.authSession.authenticated
-                        text: "退出登录"
-                        onClicked: root.controller.authSession.logout()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#173042"
-                            font: parent.font
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: 20
-                            color: "#eef3f5"
-                            border.color: "#c9d4db"
-                            border.width: 1
-                        }
-                    }
-                }
             }
         }
 
         GridLayout {
             Layout.fillWidth: true
             columns: mobile ? 1 : 2
-            columnSpacing: 16
-            rowSpacing: 16
+            columnSpacing: theme.sectionGap
+            rowSpacing: theme.sectionGap
 
             InfoCard {
-                title: "远程接入"
-                subtitle: "公网和局域网都通过 API Base 统一接入；移动端默认优先使用后端接口。"
+                title: "局域网 API"
+                subtitle: "安卓和桌面共用同一入口。手机接入时，把 API Base 改成电脑在局域网里的地址；本地联调默认可用 127.0.0.1。"
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
 
                     Label {
-                        text: "接口地址"
+                        text: "API Base"
                         color: theme.textMuted
-                        font.pixelSize: root.mobile ? 15 : 12
+                        font.pixelSize: mobile ? 15 : 12
                     }
 
                     TextField {
                         Layout.fillWidth: true
                         text: root.controller.authSession.apiBaseUrl
-                        font.pixelSize: root.mobile ? 18 : 15
+                        placeholderText: "例如 http://192.168.1.20:8000/api/v1"
+                        font.pixelSize: mobile ? 18 : 15
                         onEditingFinished: root.controller.authSession.apiBaseUrl = text
                     }
 
                     InfoRow {
-                        label: "云端链路"
+                        label: "当前链路"
                         value: theme.connectionStateText(root.controller.remoteSyncService.connectionState)
                     }
 
                     InfoRow {
-                        label: "移动端策略"
-                        value: "移动端优先使用快速轮询；WebSocket 可用时会自动切到实时推送。"
+                        label: "调试建议"
+                        value: "桌面本机： http://127.0.0.1:8000/api/v1\n安卓手机： 改成电脑局域网 IP，例如 http://192.168.1.20:8000/api/v1"
                     }
                 }
             }
 
             InfoCard {
                 title: "模式与权限"
-                subtitle: "工程模式仅供桌面管理员使用，用于串口、本地 MQTT 与旧继电器联调。"
+                subtitle: "工程模式仅保留给桌面管理员，用于串口、本地 MQTT 和联调入口；统一交互主线始终走概览、控制、气象、设置。"
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -283,14 +227,14 @@ ScrollView {
                         Label {
                             text: "工程模式"
                             color: theme.textMuted
-                            font.pixelSize: root.mobile ? 16 : 13
+                            font.pixelSize: mobile ? 16 : 13
                         }
 
                         Switch {
                             checked: root.controller.engineeringMode
                             enabled: !root.controller.androidMode && root.controller.authSession.admin
                             text: checked ? "已开启" : "已关闭"
-                            font.pixelSize: root.mobile ? 16 : 13
+                            font.pixelSize: mobile ? 16 : 13
                             onToggled: root.controller.engineeringMode = checked
                         }
                     }
@@ -298,8 +242,8 @@ ScrollView {
                     InfoRow {
                         label: "说明"
                         value: root.controller.engineeringMode
-                               ? "当前可访问串口诊断、旧设备控制与本地 MQTT 联调能力。"
-                               : "当前优先使用远程 API，适合公网和移动端接入。"
+                               ? "当前可访问串口、日志和工程页，但桌面与安卓的核心控制流程仍然保持一致。"
+                               : "当前优先使用远程 API 与实时同步，适合桌面值守和手机控制。"
                     }
                 }
             }
@@ -319,34 +263,32 @@ ScrollView {
 
                     InfoRow {
                         label: "缓存策略"
-                        value: "每台设备保留最近 7 天数据，单设备最多缓存 10000 条消息。"
+                        value: "设备状态、历史、告警和待确认命令都会进入本地缓存，确保桌面与安卓掉线后能保留最近状态。"
                     }
 
                     InfoRow {
-                        label: "刷新策略"
-                        value: root.controller.androidMode
-                               ? "设备页高频轮询，其他页面低频同步。"
-                               : "桌面端轮询更稳，适合值守与联动控制。"
+                        label: "移动端策略"
+                        value: "安卓优先走 WebSocket；如果实时链路不可用，会自动回落到轮询同步。"
                     }
                 }
             }
 
             InfoCard {
-                title: "告警规则"
-                subtitle: "系统会把设备离线、命令超时、低 RSSI 和链路异常统一收口到告警中心。"
+                title: "控制与告警"
+                subtitle: "继电器与停机坪控制继续沿用统一命令集合，状态变化会同步写入历史和告警。"
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 12
 
                     InfoRow {
-                        label: "触发条件"
-                        value: "设备离线、命令 ACK 超时、命令失败、MQTT 断连和低 RSSI。"
+                        label: "命令集合"
+                        value: "set_r1、set_r2、set_all、query_status，以及停机坪协议下的 pad_open、pad_close、pad_stop、query_pad_status。"
                     }
 
                     InfoRow {
-                        label: "控制反馈"
-                        value: "状态上报与命令结果会一起回写，按钮会在状态确认后尽快恢复。"
+                        label: "反馈逻辑"
+                        value: "控制页、概览页和 LCD 均以状态回传为准。按钮提交后会等待 ACK 或新状态，避免误判执行结果。"
                     }
                 }
             }

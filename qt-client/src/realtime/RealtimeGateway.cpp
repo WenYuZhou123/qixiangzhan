@@ -13,6 +13,8 @@
 
 namespace
 {
+constexpr int kDirectCommandTimeoutMs = 12000;
+
 bool isLegacyStatusTopic(const QString &topicName)
 {
     return topicName.startsWith(QStringLiteral("device/")) &&
@@ -819,7 +821,16 @@ bool RealtimeGateway::publishCommand(const QString &command, int value, bool has
     }
 
     m_lastCommandDeviceId = deviceId;
-    m_commandTracker->startPending(msgId, command, value, hasValue);
+    m_commandTracker->startPending(msgId, command, value, hasValue, kDirectCommandTimeoutMs);
+    m_stateStore->applyPredictedCommand(deviceId, command, value, hasValue);
+    if (m_deviceRepository != nullptr)
+    {
+        const DeviceState predicted = m_stateStore->stateForDevice(deviceId);
+        if (!predicted.deviceId.isEmpty())
+        {
+            m_deviceRepository->upsertState(predicted);
+        }
+    }
     m_historyRepository->appendRecord(
         MessageRecord{0,
                       deviceId,

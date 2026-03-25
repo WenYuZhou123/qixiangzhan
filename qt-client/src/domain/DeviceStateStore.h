@@ -103,6 +103,7 @@ public:
     void hydrateStates(const QVector<DeviceState> &states);
     void noteAckStatus(const QString &summary, const QString &result);
     void setLastError(const QString &errorText);
+    void applyPredictedCommand(const QString &deviceId, const QString &command, int value, bool hasValue);
 
     Q_INVOKABLE void clearLastError();
 

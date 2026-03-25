@@ -7,6 +7,7 @@ ScrollView {
     property var controller
     readonly property var store: controller.realtimeGateway.stateStore
     readonly property bool mobile: controller.androidMode || width < 1080
+    readonly property bool phone: width < theme.breakpointCompact || controller.androidMode
 
     clip: true
 
@@ -19,7 +20,7 @@ ScrollView {
         required property string note
         Layout.fillWidth: true
         radius: theme.radiusMedium
-        color: theme.glassSoft
+        color: theme.surfacePrimary
         border.color: theme.borderSoft
         border.width: 1
         implicitHeight: 132
@@ -32,7 +33,7 @@ ScrollView {
             Label {
                 text: parent.parent.title
                 color: theme.textMuted
-                font.pixelSize: 12
+                font.pixelSize: theme.labelSize(root.mobile)
             }
 
             Row {
@@ -41,7 +42,7 @@ ScrollView {
                 Label {
                     text: parent.parent.value
                     color: theme.textBody
-                    font.pixelSize: 28
+                    font.pixelSize: root.mobile ? 28 : 30
                     font.bold: true
                 }
 
@@ -65,7 +66,7 @@ ScrollView {
 
     ColumnLayout {
         width: root.availableWidth
-        spacing: 14
+        spacing: theme.sectionGap
 
         Rectangle {
             Layout.fillWidth: true
@@ -77,7 +78,7 @@ ScrollView {
             }
             border.color: theme.borderStrong
             border.width: 1
-            implicitHeight: root.mobile ? 220 : 230
+            implicitHeight: mobile ? 224 : 232
 
             ColumnLayout {
                 anchors.fill: parent
@@ -92,22 +93,23 @@ ScrollView {
                         spacing: 4
 
                         Label {
-                            text: "机场核心气象"
+                            text: "核心气象"
                             color: theme.textPrimary
-                            font.pixelSize: root.mobile ? 28 : 34
+                            font.pixelSize: theme.heroTitleSize(mobile)
                             font.bold: true
                         }
 
                         Label {
-                            text: "适航建议由风速、能见度等核心指标实时归纳。"
+                            text: "统一汇总风速、能见度、空气质量和雨滴状态，为控制页和 LCD 提供同样的气象判断依据。"
                             color: "#cfdae2"
-                            font.pixelSize: 14
+                            font.pixelSize: theme.bodySize(mobile)
+                            wrapMode: Text.Wrap
                         }
                     }
 
                     Rectangle {
                         radius: 18
-                        implicitWidth: 120
+                        implicitWidth: 124
                         implicitHeight: 40
                         color: theme.flightRuleColor(store.windSpeed, store.visibility)
                         border.color: "#d9e5ea"
@@ -125,7 +127,7 @@ ScrollView {
 
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: root.mobile ? 2 : 4
+                    columns: phone ? 2 : 4
                     columnSpacing: 10
                     rowSpacing: 10
 
@@ -136,51 +138,26 @@ ScrollView {
                         note: (store.windDirectionText.length > 0 ? store.windDirectionText + "  " : "")
                               + Number(store.windDirection).toFixed(0) + "°"
                     }
+
                     StatCard {
                         title: "温度"
                         value: Number(store.temperature).toFixed(1)
                         unit: "°C"
                         note: "湿度 " + Number(store.humidity).toFixed(0) + "%"
                     }
+
                     StatCard {
                         title: "气压"
                         value: Number(store.pressure).toFixed(1)
                         unit: "hPa"
-                        note: "监测面气压"
+                        note: "地面气压"
                     }
+
                     StatCard {
                         title: "能见度"
                         value: Number(store.visibility).toFixed(1)
                         unit: "km"
-                        note: "起降可视环境"
-                    }
-
-                    StatCard {
-                        title: "雨滴"
-                        value: store.rainLevelText.length > 0 ? store.rainLevelText : (store.rainDetected ? "有雨" : "无雨")
-                        unit: ""
-                        note: "湿润度 " + Number(store.rainValue).toFixed(0) + "%  ADC " + store.rainAdcRaw
-                    }
-
-                    StatCard {
-                        title: "PM2.5 / PM10"
-                        value: Number(store.pm25).toFixed(0) + " / " + Number(store.pm10).toFixed(0)
-                        unit: "ug/m3"
-                        note: "颗粒物浓度"
-                    }
-
-                    StatCard {
-                        title: "CO2"
-                        value: Number(store.co2).toFixed(0)
-                        unit: "ppm"
-                        note: "空气质量核心指标"
-                    }
-
-                    StatCard {
-                        title: "TVOC / CH2O"
-                        value: Number(store.tvoc).toFixed(3) + " / " + Number(store.ch2o).toFixed(3)
-                        unit: "mg/m3"
-                        note: "挥发物 / 甲醛"
+                        note: "飞行可视条件"
                     }
                 }
             }
@@ -188,9 +165,44 @@ ScrollView {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: root.mobile ? 1 : 2
-            columnSpacing: 14
-            rowSpacing: 14
+            columns: phone ? 2 : 4
+            columnSpacing: 12
+            rowSpacing: 12
+
+            StatCard {
+                title: "雨滴"
+                value: store.rainLevelText.length > 0 ? store.rainLevelText : (store.rainDetected ? "有雨" : "无雨")
+                unit: ""
+                note: "湿润度 " + Number(store.rainValue).toFixed(0) + "% · ADC " + store.rainAdcRaw
+            }
+
+            StatCard {
+                title: "PM2.5 / PM10"
+                value: Number(store.pm25).toFixed(0) + " / " + Number(store.pm10).toFixed(0)
+                unit: "ug/m3"
+                note: "颗粒物浓度"
+            }
+
+            StatCard {
+                title: "CO2"
+                value: Number(store.co2).toFixed(0)
+                unit: "ppm"
+                note: "空气质量核心指标"
+            }
+
+            StatCard {
+                title: "TVOC / CH2O"
+                value: Number(store.tvoc).toFixed(3) + " / " + Number(store.ch2o).toFixed(3)
+                unit: "mg/m3"
+                note: "挥发物与甲醛"
+            }
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: mobile ? 1 : 2
+            columnSpacing: theme.sectionGap
+            rowSpacing: theme.sectionGap
 
             Rectangle {
                 Layout.fillWidth: true
@@ -198,7 +210,7 @@ ScrollView {
                 color: "#fbfcfd"
                 border.color: theme.borderSoft
                 border.width: 1
-                implicitHeight: 250
+                implicitHeight: 262
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -208,20 +220,20 @@ ScrollView {
                     Label {
                         text: "适航评估"
                         color: theme.textBody
-                        font.pixelSize: 24
+                        font.pixelSize: theme.pageTitleSize(mobile)
                         font.bold: true
                     }
 
                     Label {
                         width: parent.width
                         text: theme.flightRuleText(store.windSpeed, store.visibility) === "适航"
-                              ? "当前风速与能见度处于适航区间，可继续执行停机场任务。"
+                              ? "当前风速与能见度处于适航区间，可继续执行停机坪任务。"
                               : theme.flightRuleText(store.windSpeed, store.visibility) === "谨慎"
-                                ? "建议在人工确认后执行起降任务，注意阵风与视程变化。"
-                                : "当前条件不建议执行无人机起降，优先保持停机场安全闭合。"
+                                ? "建议人工确认后再执行动作，重点关注阵风和能见度变化。"
+                                : "当前条件不建议继续执行无人机起降或停机坪联动，优先保持安全状态。"
                         wrapMode: Text.Wrap
                         color: theme.textMuted
-                        font.pixelSize: 13
+                        font.pixelSize: theme.bodySize(mobile)
                     }
 
                     Rectangle {
@@ -246,21 +258,11 @@ ScrollView {
                             Label { text: "能见度"; color: theme.textMuted; font.pixelSize: 12 }
                             Label { text: Number(store.visibility).toFixed(1) + " km"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
                             Label { text: "雨滴"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: store.rainLevelText.length > 0 ? store.rainLevelText : (store.rainDetected ? "检测到" : "未检测到"); color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "RAW ADC"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: "W " + store.windSpeedRaw + " / D " + store.windDirectionRaw + " / R " + store.rainAdcRaw; color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "PM2.5"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: Number(store.pm25).toFixed(0) + " ug/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "PM10"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: Number(store.pm10).toFixed(0) + " ug/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "CO2"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: Number(store.co2).toFixed(0) + " ppm"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "TVOC"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: Number(store.tvoc).toFixed(3) + " mg/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "CH2O"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: Number(store.ch2o).toFixed(3) + " mg/m3"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
-                            Label { text: "停机场模式"; color: theme.textMuted; font.pixelSize: 12 }
-                            Label { text: store.padMode; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: store.rainDetected ? "检测到" : "未检测到"; color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "停机模式"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: theme.padModeText(store.padMode); color: theme.textBody; font.pixelSize: 14; font.bold: true }
+                            Label { text: "适航结论"; color: theme.textMuted; font.pixelSize: 12 }
+                            Label { text: theme.flightRuleText(store.windSpeed, store.visibility); color: theme.flightRuleColor(store.windSpeed, store.visibility); font.pixelSize: 14; font.bold: true }
                         }
                     }
                 }
@@ -272,7 +274,7 @@ ScrollView {
                 color: "#fbfcfd"
                 border.color: theme.borderSoft
                 border.width: 1
-                implicitHeight: 250
+                implicitHeight: 262
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -280,18 +282,18 @@ ScrollView {
                     spacing: 12
 
                     Label {
-                        text: "航线与相机预留"
+                        text: "传感器原始输入"
                         color: theme.textBody
-                        font.pixelSize: 24
+                        font.pixelSize: theme.pageTitleSize(mobile)
                         font.bold: true
                     }
 
                     Label {
                         width: parent.width
-                        text: "后续会接入无人机航迹、相机回传、地图等信息层。当前阶段先预留视觉位与数据结构。"
+                        text: "原始 ADC、风传感器报文和雨滴等级在这里集中查看，便于桌面、安卓和本地屏统一联调。"
                         wrapMode: Text.Wrap
                         color: theme.textMuted
-                        font.pixelSize: 13
+                        font.pixelSize: theme.bodySize(mobile)
                     }
 
                     Rectangle {
@@ -305,24 +307,25 @@ ScrollView {
                         border.color: theme.borderStrong
                         border.width: 1
 
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 8
+                        GridLayout {
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            columns: 2
+                            rowSpacing: 10
+                            columnSpacing: 10
 
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "Drone Route / Camera Feed"
-                                color: theme.textPrimary
-                                font.pixelSize: 18
-                                font.bold: true
-                            }
-
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "即将接入"
-                                color: "#bfd2de"
-                                font.pixelSize: 13
-                            }
+                            Label { text: "风速 ADC"; color: "#bfd2de"; font.pixelSize: 12 }
+                            Label { text: String(store.windSpeedRaw); color: theme.textPrimary; font.pixelSize: 14; font.bold: true }
+                            Label { text: "风向 ADC"; color: "#bfd2de"; font.pixelSize: 12 }
+                            Label { text: String(store.windDirectionRaw); color: theme.textPrimary; font.pixelSize: 14; font.bold: true }
+                            Label { text: "雨滴 ADC"; color: "#bfd2de"; font.pixelSize: 12 }
+                            Label { text: String(store.rainAdcRaw); color: theme.textPrimary; font.pixelSize: 14; font.bold: true }
+                            Label { text: "PM2.5"; color: "#bfd2de"; font.pixelSize: 12 }
+                            Label { text: Number(store.pm25).toFixed(0) + " ug/m3"; color: theme.textPrimary; font.pixelSize: 14; font.bold: true }
+                            Label { text: "TVOC"; color: "#bfd2de"; font.pixelSize: 12 }
+                            Label { text: Number(store.tvoc).toFixed(3) + " mg/m3"; color: theme.textPrimary; font.pixelSize: 14; font.bold: true }
+                            Label { text: "CH2O"; color: "#bfd2de"; font.pixelSize: 12 }
+                            Label { text: Number(store.ch2o).toFixed(3) + " mg/m3"; color: theme.textPrimary; font.pixelSize: 14; font.bold: true }
                         }
                     }
                 }

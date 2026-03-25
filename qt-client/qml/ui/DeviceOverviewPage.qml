@@ -7,6 +7,7 @@ Item {
     property var controller
     readonly property var store: controller.realtimeGateway.stateStore
     readonly property bool mobile: controller.androidMode || width < 1180
+    readonly property bool phone: width < theme.breakpointCompact || controller.androidMode
 
     TaskTheme { id: theme }
 
@@ -16,10 +17,10 @@ Item {
         required property string caption
         Layout.fillWidth: true
         radius: theme.radiusMedium
-        color: theme.glassSoft
+        color: theme.surfacePrimary
         border.color: theme.borderSoft
         border.width: 1
-        implicitHeight: 96
+        implicitHeight: 98
 
         Column {
             anchors.fill: parent
@@ -29,7 +30,7 @@ Item {
             Label {
                 text: parent.parent.title
                 color: theme.textMuted
-                font.pixelSize: 12
+                font.pixelSize: theme.labelSize(root.mobile)
             }
 
             Label {
@@ -53,14 +54,14 @@ Item {
         required property string textLabel
         required property color fill
         implicitHeight: 34
-        implicitWidth: stateLabel.implicitWidth + 28
+        implicitWidth: pillLabel.implicitWidth + 28
         radius: 17
         color: fill
         border.color: "#dbe5ea"
         border.width: 1
 
         Label {
-            id: stateLabel
+            id: pillLabel
             anchors.centerIn: parent
             text: parent.textLabel
             color: "white"
@@ -86,12 +87,12 @@ Item {
         required property real pm25
         required property bool selected
 
-        Layout.fillWidth: true
+        width: ListView.view ? ListView.view.width : parent.width
         radius: 24
         color: selected ? theme.glassStrong : "#f8fbfc"
         border.color: selected ? theme.accentCyan : theme.borderSoft
         border.width: selected ? 2 : 1
-        implicitHeight: 138
+        implicitHeight: 146
 
         ColumnLayout {
             anchors.fill: parent
@@ -133,12 +134,12 @@ Item {
                     color: theme.pageSurface
                     border.color: theme.borderSoft
                     border.width: 1
-                    implicitWidth: 92
+                    implicitWidth: 96
                     implicitHeight: 30
 
                     Label {
                         anchors.centerIn: parent
-                        text: protocolProfile === "airport_pad_v1" ? "停机场" : "工程设备"
+                        text: theme.protocolText(protocolProfile)
                         color: theme.textBody
                         font.pixelSize: 12
                         font.bold: true
@@ -150,7 +151,7 @@ Item {
                     color: theme.pageSurface
                     border.color: theme.borderSoft
                     border.width: 1
-                    implicitWidth: 160
+                    implicitWidth: 176
                     implicitHeight: 30
 
                     Label {
@@ -164,8 +165,8 @@ Item {
 
             Label {
                 width: parent.width
-                text: "RSSI " + rssi + "  ·  " + (padReady ? "允许降落" : "待命") + "  ·  "
-                      + theme.occupancyText(padOccupied) + "  ·  风速 " + Number(windSpeed).toFixed(1) + " m/s"
+                text: "RSSI " + rssi + " · " + (padReady ? "允许降落" : "待命") + " · "
+                      + theme.occupancyText(padOccupied) + " · 风速 " + Number(windSpeed).toFixed(1) + " m/s"
                 color: theme.textMuted
                 font.pixelSize: 12
                 elide: Text.ElideRight
@@ -173,8 +174,9 @@ Item {
 
             Label {
                 width: parent.width
-                text: "温度 " + Number(temperature).toFixed(1) + " °C  ·  "
-                      + "雨滴 " + (rainDetected ? "检测到" : "未检测到") + "  ·  PM2.5 " + Number(pm25).toFixed(0)
+                text: "温度 " + Number(temperature).toFixed(1) + " °C · "
+                      + "雨滴 " + (rainDetected ? "检测到" : "未检测到") + " · PM2.5 " + Number(pm25).toFixed(0)
+                      + (alarmCount > 0 ? " · 告警 " + alarmCount : "")
                 color: theme.textMuted
                 font.pixelSize: 12
                 elide: Text.ElideRight
@@ -189,7 +191,7 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 14
+        spacing: theme.sectionGap
 
         ScrollView {
             Layout.fillWidth: true
@@ -197,8 +199,8 @@ Item {
             clip: true
 
             ColumnLayout {
-                width: root.mobile ? root.width - 8 : parent.width
-                spacing: 14
+                width: root.width - (!root.mobile ? 340 + theme.sectionGap : 0)
+                spacing: theme.sectionGap
 
                 Rectangle {
                     Layout.fillWidth: true
@@ -210,13 +212,13 @@ Item {
                     }
                     border.color: theme.borderStrong
                     border.width: 1
-                    implicitHeight: root.mobile ? 248 : 286
+                    implicitHeight: root.mobile ? 254 : 286
 
                     Rectangle {
-                        width: parent.width * 0.42
-                        height: parent.height * 1.1
-                        x: parent.width * 0.54
-                        y: -parent.height * 0.22
+                        width: parent.width * 0.38
+                        height: parent.height * 1.08
+                        x: parent.width * 0.58
+                        y: -parent.height * 0.18
                         radius: width / 2
                         color: "#24d7e5ed"
                     }
@@ -231,18 +233,18 @@ Item {
                             spacing: 10
 
                             Label {
-                                text: "任务总览"
+                                text: "统一概览"
                                 color: theme.textPrimary
-                                font.pixelSize: root.mobile ? 28 : 38
+                                font.pixelSize: theme.heroTitleSize(root.mobile)
                                 font.bold: true
                             }
 
                             Label {
                                 width: parent.width
-                                text: "停机场开合、机场核心气象和无人机任务会在同一任务框架内协同工作。当前阶段先固定停机场控制与气象摘要。"
+                                text: "概览页统一展示当前设备、核心气象、告警与快捷控制入口，让桌面、安卓和本地 LCD 的主线认知保持一致。"
                                 wrapMode: Text.Wrap
                                 color: "#cfdae2"
-                                font.pixelSize: root.mobile ? 14 : 15
+                                font.pixelSize: theme.bodySize(root.mobile)
                             }
 
                             RowLayout {
@@ -254,99 +256,67 @@ Item {
                                 }
 
                                 StatePill {
-                                    textLabel: store.padReady ? "允许降落" : "停机场待命"
-                                    fill: store.padReady ? theme.success : theme.warning
-                                }
-
-                                StatePill {
                                     textLabel: store.online ? "设备在线" : "设备离线"
                                     fill: store.online ? theme.success : theme.danger
                                 }
+
+                                StatePill {
+                                    textLabel: store.padReady ? "允许降落" : "停机待命"
+                                    fill: store.padReady ? theme.success : theme.warning
+                                }
                             }
 
-                            Button {
-                                text: "查询当前设备"
-                                Layout.preferredWidth: root.mobile ? 176 : 196
-                                enabled: root.controller.commandConnected && !root.controller.commandPending
-                                onClicked: root.controller.queryPadStatus()
+                            RowLayout {
+                                spacing: 10
 
-                                contentItem: Text {
-                                    text: parent.text
-                                    color: theme.textBody
-                                    font: parent.font
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                                Button {
+                                    text: "进入控制"
+                                    Layout.preferredWidth: 142
+                                    Layout.preferredHeight: theme.touchTarget
+                                    onClicked: root.controller.currentPage = "pad"
                                 }
 
-                                background: Rectangle {
-                                    radius: 22
-                                    color: parent.enabled ? theme.glassStrong : theme.neutral
-                                    border.color: theme.borderSoft
-                                    border.width: 1
+                                Button {
+                                    text: "查看气象"
+                                    Layout.preferredWidth: 142
+                                    Layout.preferredHeight: theme.touchTarget
+                                    onClicked: root.controller.currentPage = "weather"
                                 }
                             }
                         }
 
                         Item {
                             visible: !root.mobile
-                            Layout.preferredWidth: 320
+                            Layout.preferredWidth: 300
                             Layout.fillHeight: true
 
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 28
-                                color: "#22ffffff"
+                                color: "#20ffffff"
                                 border.color: "#49667a"
                                 border.width: 1
                             }
 
-                            Rectangle {
-                                width: 212
-                                height: 212
+                            Column {
                                 anchors.centerIn: parent
-                                radius: 106
-                                color: "#16384b"
-                                border.color: theme.accentCyan
-                                border.width: 1
-                            }
+                                spacing: 10
 
-                            Rectangle {
-                                width: 126
-                                height: 12
-                                radius: 6
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.verticalCenterOffset: -32
-                                color: "#dcebf1"
-                            }
+                                Rectangle {
+                                    width: 182
+                                    height: 182
+                                    radius: 91
+                                    color: "#16384b"
+                                    border.color: theme.accentCyan
+                                    border.width: 1
+                                }
 
-                            Rectangle {
-                                width: 126
-                                height: 12
-                                radius: 6
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.verticalCenterOffset: 32
-                                color: "#dcebf1"
-                            }
-
-                            Rectangle {
-                                width: 116
-                                height: 32
-                                radius: 16
-                                anchors.centerIn: parent
-                                color: theme.accentCyanDeep
-                                border.color: "#9bc9d7"
-                                border.width: 1
-                            }
-
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: 22
-                                text: "无人机任务主视觉"
-                                color: theme.textPrimary
-                                font.pixelSize: 14
+                                Label {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "控制与气象同屏协同"
+                                    color: theme.textPrimary
+                                    font.pixelSize: 14
+                                }
                             }
                         }
                     }
@@ -359,7 +329,7 @@ Item {
                     color: "#f7eeef"
                     border.color: "#d9b8bc"
                     border.width: 1
-                    implicitHeight: 74
+                    implicitHeight: 78
 
                     RowLayout {
                         anchors.fill: parent
@@ -378,7 +348,7 @@ Item {
                             }
 
                             Label {
-                                text: "活动告警 " + store.activeAlarmCount + " 条，建议优先检查停机场状态与链路健康。"
+                                text: "活动告警 " + store.activeAlarmCount + " 条，建议先检查设备链路和继电器状态。"
                                 color: theme.textMuted
                                 font.pixelSize: 12
                             }
@@ -393,9 +363,21 @@ Item {
 
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: root.mobile ? 2 : 4
+                    columns: root.phone ? 2 : 4
                     columnSpacing: 12
                     rowSpacing: 12
+
+                    MetricCard {
+                        title: "当前设备"
+                        value: store.currentDeviceId.length > 0 ? store.currentDeviceId : "未选择"
+                        caption: theme.protocolText(store.protocolProfile)
+                    }
+
+                    MetricCard {
+                        title: "继电器"
+                        value: "R1 " + theme.relayStateText(store.relay1On) + " / R2 " + theme.relayStateText(store.relay2On)
+                        caption: "控制页与 LCD 状态一致"
+                    }
 
                     MetricCard {
                         title: "风速"
@@ -404,39 +386,33 @@ Item {
                     }
 
                     MetricCard {
-                        title: "温度"
+                        title: "温湿度"
                         value: Number(store.temperature).toFixed(1) + " °C"
-                        caption: "湿度 " + Number(store.humidity).toFixed(0) + " %"
+                        caption: "湿度 " + Number(store.humidity).toFixed(0) + "%"
                     }
 
                     MetricCard {
-                        title: "气压"
-                        value: Number(store.pressure).toFixed(1) + " hPa"
-                        caption: "能见度 " + Number(store.visibility).toFixed(1) + " km"
-                    }
-
-                    MetricCard {
-                        title: "停机场"
+                        title: "停机坪"
                         value: store.padReady ? "允许降落" : "待命"
                         caption: theme.occupancyText(store.padOccupied) + " · " + theme.padModeText(store.padMode)
                     }
 
                     MetricCard {
-                        title: "颗粒物"
+                        title: "空气质量"
                         value: "PM2.5 " + Number(store.pm25).toFixed(0)
                         caption: "PM10 " + Number(store.pm10).toFixed(0) + " ug/m3"
-                    }
-
-                    MetricCard {
-                        title: "空气成分"
-                        value: "CO2 " + Number(store.co2).toFixed(0) + " ppm"
-                        caption: "TVOC " + Number(store.tvoc).toFixed(3) + " / CH2O " + Number(store.ch2o).toFixed(3)
                     }
 
                     MetricCard {
                         title: "雨滴"
                         value: store.rainDetected ? "检测到" : "未检测到"
                         caption: "湿润度 " + Number(store.rainValue).toFixed(0) + "%"
+                    }
+
+                    MetricCard {
+                        title: "最后回执"
+                        value: store.lastAckSummary.length > 0 ? store.lastAckSummary : "等待回执"
+                        caption: store.lastError.length > 0 ? store.lastError : "控制链路正常"
                     }
                 }
 
@@ -456,7 +432,7 @@ Item {
                         Label {
                             text: "设备切换"
                             color: theme.textBody
-                            font.pixelSize: 22
+                            font.pixelSize: theme.pageTitleSize(true)
                             font.bold: true
                         }
 
@@ -483,133 +459,6 @@ Item {
                         }
                     }
                 }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: root.mobile ? 1 : 2
-                    columnSpacing: 14
-                    rowSpacing: 14
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        radius: theme.radiusLarge
-                        color: "#fbfcfd"
-                        border.color: theme.borderSoft
-                        border.width: 1
-                        implicitHeight: 220
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 18
-                            spacing: 10
-
-                            Label {
-                                text: "停机场摘要"
-                                color: theme.textBody
-                                font.pixelSize: 24
-                                font.bold: true
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 10
-
-                                MetricCard {
-                                    title: "左舱门"
-                                    value: theme.padStateText(store.padLeftState)
-                                    caption: "机械舱门 A"
-                                }
-
-                                MetricCard {
-                                    title: "右舱门"
-                                    value: theme.padStateText(store.padRightState)
-                                    caption: "机械舱门 B"
-                                }
-                            }
-
-                            Label {
-                                width: parent.width
-                                text: "最近回执：" + (store.lastAckSummary.length > 0 ? store.lastAckSummary : "等待新的任务命令")
-                                wrapMode: Text.Wrap
-                                color: theme.textMuted
-                                font.pixelSize: 13
-                            }
-
-                            RowLayout {
-                                spacing: 10
-
-                                Button {
-                                    text: "进入停机场控制"
-                                    onClicked: root.controller.currentPage = "pad"
-                                }
-
-                                Button {
-                                    text: "查看历史"
-                                    onClicked: root.controller.currentPage = "history"
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        radius: theme.radiusLarge
-                        color: "#fbfcfd"
-                        border.color: theme.borderSoft
-                        border.width: 1
-                        implicitHeight: 220
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 18
-                            spacing: 10
-
-                            Label {
-                                text: "任务扩展预留"
-                                color: theme.textBody
-                                font.pixelSize: 24
-                                font.bold: true
-                            }
-
-                            Label {
-                                width: parent.width
-                                text: "无人机起飞、降落、自动任务调度和航线地图会在后续阶段接入。当前阶段先固定停机场与机场核心气象链路。"
-                                wrapMode: Text.Wrap
-                                color: theme.textMuted
-                                font.pixelSize: 13
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                radius: 22
-                                color: "#eff4f7"
-                                border.color: theme.borderSoft
-                                border.width: 1
-
-                                Column {
-                                    anchors.centerIn: parent
-                                    spacing: 8
-
-                                    Label {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        text: "无人机任务与航线"
-                                        color: theme.accentCyanDeep
-                                        font.pixelSize: 16
-                                        font.bold: true
-                                    }
-
-                                    Label {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        text: "即将接入"
-                                        color: theme.textMuted
-                                        font.pixelSize: 13
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -630,12 +479,12 @@ Item {
                 Label {
                     text: "设备矩阵"
                     color: theme.textBody
-                    font.pixelSize: 24
+                    font.pixelSize: theme.pageTitleSize(false)
                     font.bold: true
                 }
 
                 Label {
-                    text: "在线设备优先排列。停机场新协议设备显示正式任务状态，旧继电器设备仅保留工程测试属性。"
+                    text: "在线设备优先排列。核心状态、风速和气象摘要在这里快速对比。"
                     color: theme.textMuted
                     font.pixelSize: 12
                     wrapMode: Text.Wrap

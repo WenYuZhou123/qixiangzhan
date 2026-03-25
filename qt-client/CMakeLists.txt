@@ -5,7 +5,7 @@ project(relay_qt_client VERSION 0.2 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(QXZ_CLIENT_DEFAULT_API_BASE "https://api.qixiangzhan.online/api/v1" CACHE STRING "Default API base used by the Qt client")
+set(QXZ_CLIENT_DEFAULT_API_BASE "http://127.0.0.1:8000/api/v1" CACHE STRING "Default API base used by the Qt client")
 if(DEFINED ENV{QXZ_CLIENT_DEFAULT_API_BASE} AND NOT "$ENV{QXZ_CLIENT_DEFAULT_API_BASE}" STREQUAL "")
     set(QXZ_CLIENT_DEFAULT_API_BASE "$ENV{QXZ_CLIENT_DEFAULT_API_BASE}" CACHE STRING "Default API base used by the Qt client" FORCE)
 endif()
@@ -63,6 +63,7 @@ qt_add_qml_module(relay_qt_client
         qml/ui/AlarmCenterPage.qml
         qml/ui/CommandHistoryPage.qml
         qml/ui/ConnectionPage.qml
+        qml/ui/ControlPage.qml
         qml/ui/DeviceOverviewPage.qml
         qml/ui/DevicePage.qml
         qml/ui/EngineeringPage.qml
