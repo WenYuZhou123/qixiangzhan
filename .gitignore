@@ -55,9 +55,20 @@ MDK-ARM/*.lst
 MDK-ARM/Objects/
 MDK-ARM/Listings/
 MDK-ARM/*.uvguix.*
+MDK-ARM/**/*.bak
+MDK-ARM/**/*.dep
+MDK-ARM/**/*.crf
+MDK-ARM/**/*.d
+MDK-ARM/**/*.o
+MDK-ARM/**/*.axf
+MDK-ARM/**/*.map
+MDK-ARM/**/*.lst
+MDK-ARM/**/*.htm
+MDK-ARM/**/*.hex
 
 # Local temp helper files
 .git_filelist.txt
+tmp_*.pdf
 
 # Runtime / local data
 tmp/

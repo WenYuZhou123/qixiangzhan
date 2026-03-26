@@ -28,6 +28,11 @@ typedef struct
     float humidity;
     float pressure;
     float visibility;
+    uint8_t capability_wind;
+    uint8_t capability_air;
+    uint8_t capability_rain;
+    uint8_t capability_pressure;
+    uint8_t capability_visibility;
     uint8_t rain_detected;
     float rain_value;
     float pm25;

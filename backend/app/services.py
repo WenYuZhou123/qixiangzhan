@@ -31,6 +31,14 @@ SUPPORTED_COMMANDS = {
     "query_pad_status",
 }
 
+DEFAULT_WEATHER_CAPABILITIES = {
+    "wind": True,
+    "air": True,
+    "rain": True,
+    "pressure": False,
+    "visibility": False,
+}
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -117,6 +125,7 @@ def normalize_payload_map(payload_map: dict[str, Any], topic: str) -> dict[str, 
 
         weather = payload_map.get("weather")
         if isinstance(weather, dict):
+            capabilities = weather_capabilities_from_payload(weather.get("capabilities"))
             normalized["weather"] = {
                 "wind_speed": coerce_float(weather.get("wind_speed"), 0.0),
                 "wind_direction": coerce_float(weather.get("wind_direction"), 0.0),
@@ -129,6 +138,7 @@ def normalize_payload_map(payload_map: dict[str, Any], topic: str) -> dict[str, 
                 "humidity": coerce_float(weather.get("humidity"), 0.0),
                 "pressure": coerce_float(weather.get("pressure"), 0.0),
                 "visibility": coerce_float(weather.get("visibility"), 0.0),
+                "capabilities": capabilities,
                 "rain_detected": coerce_bool(weather.get("rain_detected"), False),
                 "rain_value": coerce_float(weather.get("rain_value"), 0.0),
                 "pm25": coerce_float(weather.get("pm25"), 0.0),
@@ -194,6 +204,16 @@ def coerce_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def weather_capabilities_from_payload(value: Any) -> dict[str, bool]:
+    capabilities = dict(DEFAULT_WEATHER_CAPABILITIES)
+
+    if isinstance(value, dict):
+        for key, fallback in DEFAULT_WEATHER_CAPABILITIES.items():
+            capabilities[key] = coerce_bool(value.get(key), fallback)
+
+    return capabilities
+
+
 def normalize_pad_state(value: Any, fallback: str = "closed") -> str:
     text = str(value or fallback).strip().lower()
     allowed = {"closed", "opening", "open", "closing", "stopped", "fault"}
@@ -217,6 +237,16 @@ def extract_weather_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
     weather = payload_map.get("weather")
     if not isinstance(weather, dict):
         weather = {}
+    capabilities = weather_capabilities_from_payload(
+        weather.get("capabilities")
+        or {
+            "wind": payload_map.get("weather_capability_wind"),
+            "air": payload_map.get("weather_capability_air"),
+            "rain": payload_map.get("weather_capability_rain"),
+            "pressure": payload_map.get("weather_capability_pressure"),
+            "visibility": payload_map.get("weather_capability_visibility"),
+        }
+    )
     return {
         "wind_speed": coerce_float(weather.get("wind_speed", payload_map.get("weather_wind_speed")), 0.0),
         "wind_direction": coerce_float(weather.get("wind_direction", payload_map.get("weather_wind_direction")), 0.0),
@@ -229,6 +259,7 @@ def extract_weather_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
         "humidity": coerce_float(weather.get("humidity", payload_map.get("weather_humidity")), 0.0),
         "pressure": coerce_float(weather.get("pressure", payload_map.get("weather_pressure")), 0.0),
         "visibility": coerce_float(weather.get("visibility", payload_map.get("weather_visibility")), 0.0),
+        "capabilities": capabilities,
         "rain_detected": coerce_bool(weather.get("rain_detected", payload_map.get("weather_rain_detected")), False),
         "rain_value": coerce_float(weather.get("rain_value", payload_map.get("weather_rain_value")), 0.0),
         "pm25": coerce_float(weather.get("pm25", payload_map.get("weather_pm25")), 0.0),
@@ -452,6 +483,13 @@ def serialize_device(device: Device, active_alarm_count: int = 0) -> dict[str, A
             "humidity": device.weather_humidity,
             "pressure": device.weather_pressure,
             "visibility": device.weather_visibility,
+            "capabilities": {
+                "wind": device.weather_capability_wind,
+                "air": device.weather_capability_air,
+                "rain": device.weather_capability_rain,
+                "pressure": device.weather_capability_pressure,
+                "visibility": device.weather_capability_visibility,
+            },
             "rain_detected": device.weather_rain_detected,
             "rain_value": device.weather_rain_value,
             "pm25": device.weather_pm25,
@@ -798,6 +836,11 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
         device.weather_humidity = weather["humidity"]
         device.weather_pressure = weather["pressure"]
         device.weather_visibility = weather["visibility"]
+        device.weather_capability_wind = weather["capabilities"]["wind"]
+        device.weather_capability_air = weather["capabilities"]["air"]
+        device.weather_capability_rain = weather["capabilities"]["rain"]
+        device.weather_capability_pressure = weather["capabilities"]["pressure"]
+        device.weather_capability_visibility = weather["capabilities"]["visibility"]
         device.weather_rain_detected = weather["rain_detected"]
         device.weather_rain_value = weather["rain_value"]
         device.weather_pm25 = weather["pm25"]

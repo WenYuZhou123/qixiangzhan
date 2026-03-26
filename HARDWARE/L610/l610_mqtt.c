@@ -2742,8 +2742,10 @@ L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
              "\"protocol_profile\":\"airport_pad_v1\",\"timestamp\":\"%s\","
              "\"net\":{\"rssi\":%d,\"operator\":\"%s\",\"ip\":\"%s\"},"
              "\"pad\":{\"left_state\":\"%s\",\"right_state\":\"%s\",\"ready\":%u,\"occupied\":%u,\"mode\":\"%s\"},"
-             "\"weather\":{\"wind_speed\":%.2f,\"wind_direction\":%.2f,\"temperature\":%.2f,\"humidity\":%.2f,"
-             "\"pressure\":%.2f,\"visibility\":%.2f,\"rain_detected\":%u,\"rain_value\":%.2f,"
+              "\"weather\":{\"wind_speed\":%.2f,\"wind_direction\":%.2f,\"temperature\":%.2f,\"humidity\":%.2f,"
+             "\"pressure\":%.2f,\"visibility\":%.2f,"
+             "\"capabilities\":{\"wind\":%u,\"air\":%u,\"rain\":%u,\"pressure\":%u,\"visibility\":%u},"
+             "\"rain_detected\":%u,\"rain_value\":%.2f,"
              "\"pm25\":%.2f,\"pm10\":%.2f,\"co2\":%.2f,\"tvoc\":%.4f,\"ch2o\":%.4f}}",
              status.device_id,
              (unsigned int)status.online,
@@ -2769,6 +2771,11 @@ L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
              (double)status.weather.humidity,
              (double)status.weather.pressure,
              (double)status.weather.visibility,
+             (unsigned int)status.weather.capability_wind,
+             (unsigned int)status.weather.capability_air,
+             (unsigned int)status.weather.capability_rain,
+             (unsigned int)status.weather.capability_pressure,
+             (unsigned int)status.weather.capability_visibility,
              (unsigned int)status.weather.rain_detected,
              (double)status.weather.rain_value,
              (double)status.weather.pm25,

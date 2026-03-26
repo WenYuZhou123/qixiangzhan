@@ -20,6 +20,7 @@ ScrollView {
         property color fillColor: theme.glassStrong
         property color labelColor: theme.textBody
         property color borderColor: theme.borderSoft
+
         Layout.fillWidth: true
         implicitHeight: theme.touchTarget + 4
 
@@ -45,12 +46,13 @@ ScrollView {
         required property string title
         required property string value
         required property string caption
+
         Layout.fillWidth: true
         radius: theme.radiusMedium
         color: theme.surfacePrimary
         border.color: theme.borderSoft
         border.width: 1
-        implicitHeight: 96
+        implicitHeight: 98
 
         Column {
             anchors.fill: parent
@@ -102,7 +104,7 @@ ScrollView {
             }
             border.color: theme.borderStrong
             border.width: 1
-            implicitHeight: mobile ? 238 : 246
+            implicitHeight: mobile ? 236 : 248
 
             ColumnLayout {
                 anchors.fill: parent
@@ -132,7 +134,7 @@ ScrollView {
 
                     Rectangle {
                         radius: 18
-                        implicitWidth: mobile ? 112 : 138
+                        implicitWidth: mobile ? 116 : 138
                         implicitHeight: 40
                         color: connected ? theme.success : theme.danger
                         border.color: "#d9e5ea"
@@ -150,9 +152,7 @@ ScrollView {
 
                 Label {
                     width: parent.width
-                    text: padDevice
-                          ? "当前设备支持停机坪开合和继电器控制。桌面与安卓共用同一套控制语义，状态反馈统一落在这里。"
-                          : "当前设备使用继电器协议，控制页优先提供 R1、R2 和全开全关操作，保持与本地 LCD 相同的状态表达。"
+                    text: "控制页只保留实际可用的控制动作和已接入环境摘要，避免未测量项干扰操作判断。"
                     wrapMode: Text.Wrap
                     color: "#d2dee5"
                     font.pixelSize: theme.bodySize(mobile)
@@ -208,7 +208,7 @@ ScrollView {
 
                         Label {
                             anchors.centerIn: parent
-                            text: padDevice ? theme.padStateText(store.padLeftState) : "继电器设备"
+                            text: padDevice ? theme.padStateText(store.padLeftState) : theme.protocolText(store.protocolProfile)
                             color: theme.textPrimary
                             font.pixelSize: 13
                             font.bold: true
@@ -225,9 +225,8 @@ ScrollView {
 
                         Label {
                             anchors.centerIn: parent
-                            text: padDevice
-                                  ? (store.padReady ? "允许降落" : "待命")
-                                  : theme.connectionStateText(controller.runtimeConnectionState)
+                            text: padDevice ? (store.padReady ? "允许降落" : "待命")
+                                            : theme.connectionStateText(controller.runtimeConnectionState)
                             color: theme.textPrimary
                             font.pixelSize: 13
                             font.bold: true
@@ -261,7 +260,7 @@ ScrollView {
 
                     Label {
                         width: parent.width
-                        text: "R1、R2、全开全关和刷新状态在三端保持同一套动作含义。按钮触控尺寸按手机优先设置。"
+                        text: "R1、R2、全开全关和刷新状态在三端保持同一动作语义。"
                         wrapMode: Text.Wrap
                         color: theme.textMuted
                         font.pixelSize: theme.bodySize(mobile)
@@ -321,10 +320,8 @@ ScrollView {
                     }
 
                     ActionButton {
-                        text: "刷新继电器状态"
+                        text: "刷新设备状态"
                         enabled: connected && !busy
-                        fillColor: theme.glassStrong
-                        labelColor: theme.textBody
                         onClicked: controller.queryStatus()
                     }
                 }
@@ -353,15 +350,15 @@ ScrollView {
                         rowSpacing: 12
 
                         MetricTile {
-                            title: "最后回执"
+                            title: "最近回执"
                             value: store.lastAckSummary.length > 0 ? store.lastAckSummary : "等待回执"
                             caption: busy ? "命令处理中" : "控制通道空闲"
                         }
 
                         MetricTile {
-                            title: "天气联动"
-                            value: theme.flightRuleText(store.windSpeed, store.visibility)
-                            caption: "风速 " + Number(store.windSpeed).toFixed(1) + " m/s · 能见度 " + Number(store.visibility).toFixed(1) + " km"
+                            title: "连接状态"
+                            value: theme.connectionStateText(controller.runtimeConnectionState)
+                            caption: connected ? "可以下发控制命令" : "请检查 API 或实时链路"
                         }
 
                         MetricTile {
@@ -371,9 +368,14 @@ ScrollView {
                         }
 
                         MetricTile {
-                            title: "连接状态"
-                            value: theme.connectionStateText(controller.runtimeConnectionState)
-                            caption: connected ? "可下发控制命令" : "请检查 API 或实时链路"
+                            title: "环境摘要"
+                            value: store.windCapability ? ("风速 " + Number(store.windSpeed).toFixed(1) + " m/s")
+                                                      : "环境数据就绪"
+                            caption: store.rainCapability
+                                     ? (store.rainDetected ? "雨滴已检测" : "无雨滴")
+                                     : (store.airCapability
+                                        ? "PM2.5 " + Number(store.pm25).toFixed(0)
+                                        : "当前无额外环境模块")
                         }
                     }
 
@@ -383,7 +385,7 @@ ScrollView {
                         color: "#eff4f7"
                         border.color: theme.borderSoft
                         border.width: 1
-                        implicitHeight: 92
+                        implicitHeight: 94
 
                         Column {
                             anchors.fill: parent
@@ -400,7 +402,7 @@ ScrollView {
                             Label {
                                 width: parent.width
                                 text: store.lastError.length > 0
-                                      ? "错误： " + store.lastError
+                                      ? "错误：" + store.lastError
                                       : (busy ? "命令已发出，等待状态回传。" : "当前没有待确认命令。")
                                 wrapMode: Text.Wrap
                                 color: store.lastError.length > 0 ? theme.danger : theme.textMuted
@@ -531,7 +533,7 @@ ScrollView {
 
                 Label {
                     width: parent.width
-                    text: "控制页仍然保留继电器开关主流程。若设备后续接入 airport_pad_v1，这里会自动切换为停机坪控制面板。"
+                    text: "控制页仍保留继电器主流程。后续设备接入 airport_pad_v1 后，这里会自动切换为停机坪控制面板。"
                     wrapMode: Text.Wrap
                     color: theme.textMuted
                     font.pixelSize: theme.bodySize(root.mobile)

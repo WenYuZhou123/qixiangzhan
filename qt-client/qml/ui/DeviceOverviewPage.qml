@@ -15,6 +15,7 @@ Item {
         required property string title
         required property string value
         required property string caption
+
         Layout.fillWidth: true
         radius: theme.radiusMedium
         color: theme.surfacePrimary
@@ -38,6 +39,7 @@ Item {
                 color: theme.textBody
                 font.pixelSize: root.mobile ? 22 : 24
                 font.bold: true
+                elide: Text.ElideRight
             }
 
             Label {
@@ -53,6 +55,7 @@ Item {
     component StatePill: Rectangle {
         required property string textLabel
         required property color fill
+
         implicitHeight: 34
         implicitWidth: pillLabel.implicitWidth + 28
         radius: 17
@@ -83,16 +86,43 @@ Item {
         required property int alarmCount
         required property real windSpeed
         required property real temperature
-        required property bool rainDetected
         required property real pm25
+        required property bool rainDetected
+        required property bool windCapability
+        required property bool airCapability
+        required property bool rainCapability
         required property bool selected
 
-        width: ListView.view ? ListView.view.width : parent.width
+        function summaryLine() {
+            var parts = ["RSSI " + rssi]
+            if (windCapability)
+                parts.push("风速 " + Number(windSpeed).toFixed(1) + " m/s")
+            if (airCapability)
+                parts.push("温度 " + Number(temperature).toFixed(1) + " °C")
+            if (rainCapability)
+                parts.push(rainDetected ? "雨滴已检测" : "无雨滴")
+            return parts.join(" · ")
+        }
+
+        function detailLine() {
+            var parts = [theme.protocolText(protocolProfile)]
+            parts.push("左门 " + theme.padStateText(padLeftState))
+            parts.push("右门 " + theme.padStateText(padRightState))
+            parts.push(padReady ? "允许降落" : "待命")
+            parts.push(theme.occupancyText(padOccupied))
+            if (airCapability)
+                parts.push("PM2.5 " + Number(pm25).toFixed(0))
+            if (alarmCount > 0)
+                parts.push("告警 " + alarmCount)
+            return parts.join(" · ")
+        }
+
+        width: ListView.view ? ListView.view.width : 320
         radius: 24
         color: selected ? theme.glassStrong : "#f8fbfc"
         border.color: selected ? theme.accentCyan : theme.borderSoft
         border.width: selected ? 2 : 1
-        implicitHeight: 146
+        implicitHeight: 150
 
         ColumnLayout {
             anchors.fill: parent
@@ -126,60 +156,20 @@ Item {
                 }
             }
 
-            RowLayout {
-                spacing: 8
-
-                Rectangle {
-                    radius: 14
-                    color: theme.pageSurface
-                    border.color: theme.borderSoft
-                    border.width: 1
-                    implicitWidth: 96
-                    implicitHeight: 30
-
-                    Label {
-                        anchors.centerIn: parent
-                        text: theme.protocolText(protocolProfile)
-                        color: theme.textBody
-                        font.pixelSize: 12
-                        font.bold: true
-                    }
-                }
-
-                Rectangle {
-                    radius: 14
-                    color: theme.pageSurface
-                    border.color: theme.borderSoft
-                    border.width: 1
-                    implicitWidth: 176
-                    implicitHeight: 30
-
-                    Label {
-                        anchors.centerIn: parent
-                        text: "左门 " + theme.padStateText(padLeftState) + " / 右门 " + theme.padStateText(padRightState)
-                        color: theme.textBody
-                        font.pixelSize: 12
-                    }
-                }
+            Label {
+                width: parent.width
+                text: parent.parent.summaryLine()
+                color: theme.textBody
+                font.pixelSize: 13
+                wrapMode: Text.Wrap
             }
 
             Label {
                 width: parent.width
-                text: "RSSI " + rssi + " · " + (padReady ? "允许降落" : "待命") + " · "
-                      + theme.occupancyText(padOccupied) + " · 风速 " + Number(windSpeed).toFixed(1) + " m/s"
+                text: parent.parent.detailLine()
                 color: theme.textMuted
                 font.pixelSize: 12
-                elide: Text.ElideRight
-            }
-
-            Label {
-                width: parent.width
-                text: "温度 " + Number(temperature).toFixed(1) + " °C · "
-                      + "雨滴 " + (rainDetected ? "检测到" : "未检测到") + " · PM2.5 " + Number(pm25).toFixed(0)
-                      + (alarmCount > 0 ? " · 告警 " + alarmCount : "")
-                color: theme.textMuted
-                font.pixelSize: 12
-                elide: Text.ElideRight
+                wrapMode: Text.Wrap
             }
         }
 
@@ -212,13 +202,13 @@ Item {
                     }
                     border.color: theme.borderStrong
                     border.width: 1
-                    implicitHeight: root.mobile ? 254 : 286
+                    implicitHeight: root.mobile ? 252 : 282
 
                     Rectangle {
-                        width: parent.width * 0.38
-                        height: parent.height * 1.08
-                        x: parent.width * 0.58
-                        y: -parent.height * 0.18
+                        width: parent.width * 0.36
+                        height: parent.height * 1.04
+                        x: parent.width * 0.6
+                        y: -parent.height * 0.2
                         radius: width / 2
                         color: "#24d7e5ed"
                     }
@@ -241,7 +231,7 @@ Item {
 
                             Label {
                                 width: parent.width
-                                text: "概览页统一展示当前设备、核心气象、告警与快捷控制入口，让桌面、安卓和本地 LCD 的主线认知保持一致。"
+                                text: "主页面只保留当前板卡真实接入的数据，概览、控制、气象和本地 LCD 保持同一套状态表达。"
                                 wrapMode: Text.Wrap
                                 color: "#cfdae2"
                                 font.pixelSize: theme.bodySize(root.mobile)
@@ -251,18 +241,19 @@ Item {
                                 spacing: 10
 
                                 StatePill {
-                                    textLabel: theme.flightRuleText(store.windSpeed, store.visibility)
-                                    fill: theme.flightRuleColor(store.windSpeed, store.visibility)
-                                }
-
-                                StatePill {
                                     textLabel: store.online ? "设备在线" : "设备离线"
                                     fill: store.online ? theme.success : theme.danger
                                 }
 
                                 StatePill {
-                                    textLabel: store.padReady ? "允许降落" : "停机待命"
+                                    textLabel: store.padReady ? "允许降落" : "停机坪待命"
                                     fill: store.padReady ? theme.success : theme.warning
+                                }
+
+                                StatePill {
+                                    visible: store.rainCapability
+                                    textLabel: store.rainDetected ? "雨滴已检测" : "无雨滴"
+                                    fill: store.rainDetected ? theme.warning : theme.accentCyanDeep
                                 }
                             }
 
@@ -313,7 +304,7 @@ Item {
 
                                 Label {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    text: "控制与气象同屏协同"
+                                    text: "概览、控制、气象保持同一语义"
                                     color: theme.textPrimary
                                     font.pixelSize: 14
                                 }
@@ -348,7 +339,7 @@ Item {
                             }
 
                             Label {
-                                text: "活动告警 " + store.activeAlarmCount + " 条，建议先检查设备链路和继电器状态。"
+                                text: "活动告警 " + store.activeAlarmCount + " 条，建议优先检查链路、继电器和传感器状态。"
                                 color: theme.textMuted
                                 font.pixelSize: 12
                             }
@@ -380,12 +371,16 @@ Item {
                     }
 
                     MetricCard {
+                        visible: store.windCapability
                         title: "风速"
                         value: Number(store.windSpeed).toFixed(1) + " m/s"
-                        caption: "风向 " + Number(store.windDirection).toFixed(0) + "°"
+                        caption: "风向 " + (store.windDirectionText.length > 0
+                                              ? store.windDirectionText + " "
+                                              : "") + Number(store.windDirection).toFixed(0) + "°"
                     }
 
                     MetricCard {
+                        visible: store.airCapability
                         title: "温湿度"
                         value: Number(store.temperature).toFixed(1) + " °C"
                         caption: "湿度 " + Number(store.humidity).toFixed(0) + "%"
@@ -398,19 +393,21 @@ Item {
                     }
 
                     MetricCard {
+                        visible: store.airCapability
                         title: "空气质量"
                         value: "PM2.5 " + Number(store.pm25).toFixed(0)
                         caption: "PM10 " + Number(store.pm10).toFixed(0) + " ug/m3"
                     }
 
                     MetricCard {
+                        visible: store.rainCapability
                         title: "雨滴"
-                        value: store.rainDetected ? "检测到" : "未检测到"
+                        value: store.rainDetected ? "已检测" : "未检测"
                         caption: "湿润度 " + Number(store.rainValue).toFixed(0) + "%"
                     }
 
                     MetricCard {
-                        title: "最后回执"
+                        title: "最近回执"
                         value: store.lastAckSummary.length > 0 ? store.lastAckSummary : "等待回执"
                         caption: store.lastError.length > 0 ? store.lastError : "控制链路正常"
                     }
@@ -452,8 +449,11 @@ Item {
                                 alarmCount: model.alarmCount
                                 windSpeed: model.windSpeed
                                 temperature: model.temperature
-                                rainDetected: model.rainDetected
                                 pm25: model.pm25
+                                rainDetected: model.rainDetected
+                                windCapability: model.windCapability
+                                airCapability: model.airCapability
+                                rainCapability: model.rainCapability
                                 selected: model.selected
                             }
                         }
@@ -484,7 +484,7 @@ Item {
                 }
 
                 Label {
-                    text: "在线设备优先排列。核心状态、风速和气象摘要在这里快速对比。"
+                    text: "在线设备优先排列。这里只展示真实测量摘要，未接入项会自动隐藏。"
                     color: theme.textMuted
                     font.pixelSize: 12
                     wrapMode: Text.Wrap
@@ -511,8 +511,11 @@ Item {
                         alarmCount: model.alarmCount
                         windSpeed: model.windSpeed
                         temperature: model.temperature
-                        rainDetected: model.rainDetected
                         pm25: model.pm25
+                        rainDetected: model.rainDetected
+                        windCapability: model.windCapability
+                        airCapability: model.airCapability
+                        rainCapability: model.rainCapability
                         selected: model.selected
                     }
                 }

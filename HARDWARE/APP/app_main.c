@@ -412,6 +412,11 @@ void App_FillDeviceStatus(App_DeviceStatus_t *status)
     status->weather.humidity = g_weather_data.humidity_rh;
     status->weather.pressure = 0.0f;
     status->weather.visibility = 0.0f;
+    status->weather.capability_wind = 1U;
+    status->weather.capability_air = 1U;
+    status->weather.capability_rain = 1U;
+    status->weather.capability_pressure = 0U;
+    status->weather.capability_visibility = 0U;
     status->weather.rain_detected = g_weather_data.rain_detected;
     status->weather.rain_value = g_weather_data.rain_value;
     status->weather.pm25 = g_weather_data.pm25_ugm3;

@@ -103,7 +103,7 @@ QtObject {
         case "Cloud Error":
             return "接口异常"
         case "Cloud Parse Error":
-            return "响应解析错误"
+            return "解析错误"
         case "Authentication Required":
             return "需要登录"
         case "API idle":
@@ -165,22 +165,5 @@ QtObject {
         default:
             return mode && mode.length > 0 ? mode : "未知"
         }
-    }
-
-    function flightRuleText(windSpeed, visibility) {
-        if (windSpeed > 15 || visibility < 2)
-            return "禁飞"
-        if (windSpeed > 10 || visibility < 5)
-            return "谨慎"
-        return "适航"
-    }
-
-    function flightRuleColor(windSpeed, visibility) {
-        const rule = flightRuleText(windSpeed, visibility)
-        if (rule === "禁飞")
-            return danger
-        if (rule === "谨慎")
-            return warning
-        return success
     }
 }

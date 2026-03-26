@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
@@ -59,6 +59,14 @@ class PadSummaryResponse(BaseModel):
     mode: str = "auto"
 
 
+class WeatherCapabilitiesResponse(BaseModel):
+    wind: bool = True
+    air: bool = True
+    rain: bool = True
+    pressure: bool = False
+    visibility: bool = False
+
+
 class WeatherSummaryResponse(BaseModel):
     wind_speed: float = 0.0
     wind_direction: float = 0.0
@@ -78,6 +86,7 @@ class WeatherSummaryResponse(BaseModel):
     co2: float = 0.0
     tvoc: float = 0.0
     ch2o: float = 0.0
+    capabilities: WeatherCapabilitiesResponse = Field(default_factory=WeatherCapabilitiesResponse)
 
 
 class DeviceResponse(BaseModel):

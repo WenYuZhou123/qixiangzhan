@@ -93,6 +93,15 @@ bool readBoolLike(const QJsonObject &json, const char *key, bool fallback = fals
 
     return fallback;
 }
+
+void applyWeatherCapabilities(DeviceState &state, const QJsonObject &json)
+{
+    state.windCapability = readBoolLike(json, "wind", state.windCapability);
+    state.airCapability = readBoolLike(json, "air", state.airCapability);
+    state.rainCapability = readBoolLike(json, "rain", state.rainCapability);
+    state.pressureCapability = readBoolLike(json, "pressure", state.pressureCapability);
+    state.visibilityCapability = readBoolLike(json, "visibility", state.visibilityCapability);
+}
 }
 
 DeviceStateStore::DeviceStateStore(QObject *parent)
@@ -272,6 +281,36 @@ double DeviceStateStore::visibility() const
     return state != nullptr ? state->visibility : 0.0;
 }
 
+bool DeviceStateStore::windCapability() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->windCapability : true;
+}
+
+bool DeviceStateStore::airCapability() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->airCapability : true;
+}
+
+bool DeviceStateStore::rainCapability() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->rainCapability : true;
+}
+
+bool DeviceStateStore::pressureCapability() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->pressureCapability : false;
+}
+
+bool DeviceStateStore::visibilityCapability() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->visibilityCapability : false;
+}
+
 bool DeviceStateStore::rainDetected() const
 {
     const DeviceState *state = currentState();
@@ -397,6 +436,11 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
         state.humidity = readDouble(weather, "humidity", state.humidity);
         state.pressure = readDouble(weather, "pressure", state.pressure);
         state.visibility = readDouble(weather, "visibility", state.visibility);
+        if (weather.contains(QStringLiteral("capabilities")) &&
+            weather.value(QStringLiteral("capabilities")).isObject())
+        {
+            applyWeatherCapabilities(state, weather.value(QStringLiteral("capabilities")).toObject());
+        }
         state.rainDetected = readBoolLike(weather, "rain_detected", state.rainDetected);
         state.rainValue = readDouble(weather, "rain_value", state.rainValue);
         state.pm25 = readDouble(weather, "pm25", state.pm25);
@@ -418,6 +462,11 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
         state.humidity = readDouble(json, "weather_humidity", state.humidity);
         state.pressure = readDouble(json, "weather_pressure", state.pressure);
         state.visibility = readDouble(json, "weather_visibility", state.visibility);
+        state.windCapability = readBoolLike(json, "weather_capability_wind", state.windCapability);
+        state.airCapability = readBoolLike(json, "weather_capability_air", state.airCapability);
+        state.rainCapability = readBoolLike(json, "weather_capability_rain", state.rainCapability);
+        state.pressureCapability = readBoolLike(json, "weather_capability_pressure", state.pressureCapability);
+        state.visibilityCapability = readBoolLike(json, "weather_capability_visibility", state.visibilityCapability);
         state.rainDetected = readBoolLike(json, "weather_rain_detected", state.rainDetected);
         state.rainValue = readDouble(json, "weather_rain_value", state.rainValue);
         state.pm25 = readDouble(json, "weather_pm25", state.pm25);

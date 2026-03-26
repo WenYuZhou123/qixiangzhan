@@ -89,6 +89,16 @@ double readNumberLike(const QJsonValue &value, double fallback = 0.0)
     return fallback;
 }
 
+void applyWeatherCapabilities(DeviceState &state, const QJsonObject &weather)
+{
+    const QJsonObject capabilities = weather.value(QStringLiteral("capabilities")).toObject();
+    state.windCapability = readBoolLike(capabilities.value(QStringLiteral("wind")), state.windCapability);
+    state.airCapability = readBoolLike(capabilities.value(QStringLiteral("air")), state.airCapability);
+    state.rainCapability = readBoolLike(capabilities.value(QStringLiteral("rain")), state.rainCapability);
+    state.pressureCapability = readBoolLike(capabilities.value(QStringLiteral("pressure")), state.pressureCapability);
+    state.visibilityCapability = readBoolLike(capabilities.value(QStringLiteral("visibility")), state.visibilityCapability);
+}
+
 QString responseErrorText(QNetworkReply *reply, const QByteArray &payload)
 {
     QJsonParseError parseError;
@@ -127,10 +137,16 @@ DeviceState deviceStateFromJson(const QJsonObject &object)
     const QJsonObject weather = object.value(QStringLiteral("weather")).toObject();
     state.windSpeed = readNumberLike(weather.value(QStringLiteral("wind_speed")));
     state.windDirection = readNumberLike(weather.value(QStringLiteral("wind_direction")));
+    state.windSpeedRaw = weather.value(QStringLiteral("wind_speed_raw")).toInt();
+    state.windDirectionRaw = weather.value(QStringLiteral("wind_direction_raw")).toInt();
+    state.rainAdcRaw = weather.value(QStringLiteral("rain_adc_raw")).toInt();
+    state.windDirectionText = weather.value(QStringLiteral("wind_direction_text")).toString();
+    state.rainLevelText = weather.value(QStringLiteral("rain_level_text")).toString();
     state.temperature = readNumberLike(weather.value(QStringLiteral("temperature")));
     state.humidity = readNumberLike(weather.value(QStringLiteral("humidity")));
     state.pressure = readNumberLike(weather.value(QStringLiteral("pressure")));
     state.visibility = readNumberLike(weather.value(QStringLiteral("visibility")));
+    applyWeatherCapabilities(state, weather);
     state.rainDetected = readBoolLike(weather.value(QStringLiteral("rain_detected")), false);
     state.rainValue = readNumberLike(weather.value(QStringLiteral("rain_value")));
     state.pm25 = readNumberLike(weather.value(QStringLiteral("pm25")));

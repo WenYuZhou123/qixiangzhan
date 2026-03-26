@@ -32,6 +32,11 @@ struct DeviceState
     double humidity = 0.0;
     double pressure = 0.0;
     double visibility = 0.0;
+    bool windCapability = true;
+    bool airCapability = true;
+    bool rainCapability = true;
+    bool pressureCapability = false;
+    bool visibilityCapability = false;
     bool rainDetected = false;
     double rainValue = 0.0;
     double pm25 = 0.0;
