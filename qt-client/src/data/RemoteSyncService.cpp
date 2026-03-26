@@ -913,6 +913,7 @@ void RemoteSyncService::setConnectionState(const QString &state, bool connectedV
     }
     if (changed)
     {
+        updateDebugSnapshot();
         emit connectionStateChanged();
     }
 }
@@ -1007,6 +1008,9 @@ void RemoteSyncService::handleApiFailure(QNetworkReply *reply,
     if (statusCode == 401 && m_authSession != nullptr && m_authSession->ensureFreshToken(0))
     {
         appendLog(QStringLiteral("%1 token refreshed").arg(context));
+        QTimer::singleShot(0, this, [this]() {
+            refreshVisibleData();
+        });
         return;
     }
     if (statusCode == 401 && m_authSession != nullptr)

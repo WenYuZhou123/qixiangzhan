@@ -7,8 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MQTT_TX_QUEUE_DEPTH            6U
-#define MQTT_CMD_QUEUE_DEPTH           6U
+#define MQTT_TX_QUEUE_DEPTH            8U
+#define MQTT_PRIORITY_QUEUE_DEPTH      8U
+#define MQTT_CMD_QUEUE_DEPTH           8U
 #define MQTT_RECENT_CMD_DEPTH          16U
 #define MQTT_CMD_ID_BUF_SIZE           48U
 #define MQTT_CMD_NAME_BUF_SIZE         32U
@@ -16,6 +17,7 @@
 #define MQTT_PUBLISH_ACK_TIMEOUT_MS    10000U
 #define MQTT_PUBLISH_QOS0_SETTLE_MS    300U
 #define MQTT_POST_RX_GUARD_MS          150U
+#define MQTT_COMMAND_FAST_WINDOW_MS    1200U
 #define MQTT_STATUS_KEEPALIVE_MS       MQTT_KEEPALIVE_STATUS_INTERVAL_MS
 #define MQTT_SUBSCRIBE_REFRESH_DELAY_MS 1500U
 #define MQTT_RX_POLL_TIMEOUT_MS        5U
@@ -71,10 +73,15 @@ static int mqtt_last_result_code = 0;
 static uint16_t mqtt_async_len = 0;
 static uint32_t mqtt_async_last_tick = 0;
 static MQTT_TxQueueEntry_t mqtt_tx_queue[MQTT_TX_QUEUE_DEPTH];
+static MQTT_TxQueueEntry_t mqtt_priority_queue[MQTT_PRIORITY_QUEUE_DEPTH];
 static uint8_t mqtt_tx_head = 0;
 static uint8_t mqtt_tx_tail = 0;
 static uint8_t mqtt_tx_count = 0;
+static uint8_t mqtt_priority_head = 0U;
+static uint8_t mqtt_priority_tail = 0U;
+static uint8_t mqtt_priority_count = 0U;
 static uint8_t mqtt_tx_inflight = 0;
+static uint8_t mqtt_tx_inflight_priority = 0U;
 static uint32_t mqtt_tx_started_tick = 0;
 static uint32_t mqtt_tx_ready_tick = 0;
 static uint8_t mqtt_status_publish_requested = 1;
@@ -87,6 +94,8 @@ static uint8_t mqtt_online_state = 1U;
 static uint8_t mqtt_subscribe_refresh_pending = 0U;
 static uint8_t mqtt_subscribe_refresh_done = 0U;
 static uint32_t mqtt_subscribe_refresh_tick = 0U;
+static uint8_t mqtt_status_priority_requested = 0U;
+static uint32_t mqtt_command_fast_until = 0U;
 static uint8_t mqtt_last_status_publish_ok = 0U;
 static uint32_t mqtt_last_status_publish_tick = 0U;
 static char mqtt_recent_msg_ids[MQTT_RECENT_CMD_DEPTH][MQTT_CMD_ID_BUF_SIZE];
@@ -96,6 +105,7 @@ static L610_MQTT_Status_t MQTT_WaitForKeywordOrOk(const char *keyword, uint32_t 
 static int MQTT_FindKnownCommandToken(const char *text, char *cmd_out, uint16_t cmd_size);
 static int MQTT_MIPCALLIsStaleActive(const char *line);
 static L610_MQTT_Status_t MQTT_ResetIPSession(void);
+static L610_MQTT_Status_t MQTT_QueuePriorityPublish(const char *topic, const char *payload, uint8_t qos, uint8_t retain);
 
 static uint8_t MQTT_IsLongPublishCommand(const char *cmd)
 {
@@ -477,6 +487,8 @@ static void MQTT_ResetStatusTracking(void)
     mqtt_subscribe_refresh_pending = 0U;
     mqtt_subscribe_refresh_done = 0U;
     mqtt_subscribe_refresh_tick = 0U;
+    mqtt_status_priority_requested = 0U;
+    mqtt_command_fast_until = 0U;
 }
 
 static void MQTT_ClearCommandQueue(void)
@@ -592,10 +604,15 @@ static L610_MQTT_Status_t MQTT_DequeueCommand(MQTT_CommandRequest_t *out_request
 static void MQTT_ClearTxQueue(void)
 {
     memset(mqtt_tx_queue, 0, sizeof(mqtt_tx_queue));
+    memset(mqtt_priority_queue, 0, sizeof(mqtt_priority_queue));
     mqtt_tx_head = 0U;
     mqtt_tx_tail = 0U;
     mqtt_tx_count = 0U;
+    mqtt_priority_head = 0U;
+    mqtt_priority_tail = 0U;
+    mqtt_priority_count = 0U;
     mqtt_tx_inflight = 0U;
+    mqtt_tx_inflight_priority = 0U;
     mqtt_tx_started_tick = 0U;
     mqtt_tx_ready_tick = 0U;
 }
@@ -659,6 +676,16 @@ static uint8_t MQTT_IsOnlineTopic(const char *topic)
     return (strcmp(topic, mqtt_config.topic_online) == 0) ? 1U : 0U;
 }
 
+static uint8_t MQTT_IsAckTopic(const char *topic)
+{
+    if (topic == NULL)
+    {
+        return 0U;
+    }
+
+    return (strcmp(topic, mqtt_config.topic_ack) == 0) ? 1U : 0U;
+}
+
 static int MQTT_FindQueuedTopicIndex(const char *topic)
 {
     uint8_t i;
@@ -705,6 +732,11 @@ static L610_MQTT_Status_t MQTT_QueuePublish(const char *topic, const char *paylo
         return L610_MQTT_NOT_READY;
     }
 
+    if (MQTT_IsAckTopic(topic) != 0U)
+    {
+        return MQTT_QueuePriorityPublish(topic, payload, qos, retain);
+    }
+
     existing_index = -1;
     if (MQTT_IsStatusTopic(topic) != 0U || MQTT_IsOnlineTopic(topic) != 0U)
     {
@@ -747,18 +779,63 @@ static L610_MQTT_Status_t MQTT_QueuePublish(const char *topic, const char *paylo
     return L610_MQTT_OK;
 }
 
+static L610_MQTT_Status_t MQTT_QueuePriorityPublish(const char *topic, const char *payload, uint8_t qos, uint8_t retain)
+{
+    MQTT_TxQueueEntry_t *entry;
+
+    if (topic == NULL || payload == NULL || topic[0] == '\0')
+    {
+        return L610_MQTT_INVALID_PARAM;
+    }
+
+    if (mqtt_state < MQTT_STATE_CONNECTED)
+    {
+        return L610_MQTT_NOT_READY;
+    }
+
+    if (mqtt_priority_count >= MQTT_PRIORITY_QUEUE_DEPTH)
+    {
+        MQTT_DebugPrint("[MQTT] Priority queue full\r\n");
+        return L610_MQTT_ERROR;
+    }
+
+    entry = &mqtt_priority_queue[mqtt_priority_tail];
+    memset(entry, 0, sizeof(*entry));
+    MQTT_SafeCopy(entry->topic, sizeof(entry->topic), topic);
+    MQTT_SafeCopy(entry->payload, sizeof(entry->payload), payload);
+    entry->qos = qos;
+    entry->retain = retain;
+
+    mqtt_priority_tail++;
+    if (mqtt_priority_tail >= MQTT_PRIORITY_QUEUE_DEPTH)
+    {
+        mqtt_priority_tail = 0U;
+    }
+    mqtt_priority_count++;
+    return L610_MQTT_OK;
+}
+
 static void MQTT_FinishQueuedPublish(L610_MQTT_Status_t result)
 {
     MQTT_TxQueueEntry_t *entry;
 
-    if (mqtt_tx_count == 0U)
+    if (mqtt_priority_count == 0U && mqtt_tx_count == 0U)
     {
         mqtt_tx_inflight = 0U;
+        mqtt_tx_inflight_priority = 0U;
         mqtt_tx_started_tick = 0U;
         return;
     }
 
-    entry = &mqtt_tx_queue[mqtt_tx_head];
+    if (mqtt_tx_inflight_priority != 0U)
+    {
+        entry = &mqtt_priority_queue[mqtt_priority_head];
+    }
+    else
+    {
+        entry = &mqtt_tx_queue[mqtt_tx_head];
+    }
+
     if (result == L610_MQTT_OK)
     {
         if (MQTT_IsStatusTopic(entry->topic) != 0U)
@@ -779,13 +856,26 @@ static void MQTT_FinishQueuedPublish(L610_MQTT_Status_t result)
     }
 
     memset(entry, 0, sizeof(*entry));
-    mqtt_tx_head++;
-    if (mqtt_tx_head >= MQTT_TX_QUEUE_DEPTH)
+    if (mqtt_tx_inflight_priority != 0U)
     {
-        mqtt_tx_head = 0U;
+        mqtt_priority_head++;
+        if (mqtt_priority_head >= MQTT_PRIORITY_QUEUE_DEPTH)
+        {
+            mqtt_priority_head = 0U;
+        }
+        mqtt_priority_count--;
     }
-    mqtt_tx_count--;
+    else
+    {
+        mqtt_tx_head++;
+        if (mqtt_tx_head >= MQTT_TX_QUEUE_DEPTH)
+        {
+            mqtt_tx_head = 0U;
+        }
+        mqtt_tx_count--;
+    }
     mqtt_tx_inflight = 0U;
+    mqtt_tx_inflight_priority = 0U;
     mqtt_tx_started_tick = 0U;
 }
 
@@ -793,7 +883,7 @@ static void MQTT_StartNextQueuedPublish(void)
 {
     MQTT_TxQueueEntry_t *entry;
 
-    if (mqtt_tx_inflight != 0U || mqtt_tx_count == 0U)
+    if (mqtt_tx_inflight != 0U || (mqtt_priority_count == 0U && mqtt_tx_count == 0U))
     {
         return;
     }
@@ -803,12 +893,23 @@ static void MQTT_StartNextQueuedPublish(void)
         return;
     }
 
-    if (mqtt_tx_ready_tick != 0U && (int32_t)(HAL_GetTick() - mqtt_tx_ready_tick) < 0)
+    if (mqtt_priority_count == 0U &&
+        mqtt_tx_ready_tick != 0U &&
+        (int32_t)(HAL_GetTick() - mqtt_tx_ready_tick) < 0)
     {
         return;
     }
 
-    entry = &mqtt_tx_queue[mqtt_tx_head];
+    if (mqtt_priority_count != 0U)
+    {
+        entry = &mqtt_priority_queue[mqtt_priority_head];
+        mqtt_tx_inflight_priority = 1U;
+    }
+    else
+    {
+        entry = &mqtt_tx_queue[mqtt_tx_head];
+        mqtt_tx_inflight_priority = 0U;
+    }
     MQTT_EscapeForAT(entry->topic, mqtt_topic_tx_buf, sizeof(mqtt_topic_tx_buf));
     MQTT_EscapeForAT(entry->payload, mqtt_payload_tx_buf, sizeof(mqtt_payload_tx_buf));
     snprintf(mqtt_cmd_tx_buf, sizeof(mqtt_cmd_tx_buf),
@@ -844,7 +945,14 @@ static void MQTT_HandlePublishTimeout(void)
         return;
     }
 
-    entry = &mqtt_tx_queue[mqtt_tx_head];
+    if (mqtt_tx_inflight_priority != 0U)
+    {
+        entry = &mqtt_priority_queue[mqtt_priority_head];
+    }
+    else
+    {
+        entry = &mqtt_tx_queue[mqtt_tx_head];
+    }
     elapsed_ms = HAL_GetTick() - mqtt_tx_started_tick;
 
     if (entry->qos == 0U)
@@ -874,11 +982,14 @@ static void MQTT_RunRealtimeStatusPublisher(void)
     RelayState_t relay1_state;
     RelayState_t relay2_state;
     L610_MQTT_Status_t status;
+    uint8_t fast_window_active;
 
     if (L610_MQTT_IsConnected() == 0)
     {
         return;
     }
+
+    fast_window_active = ((int32_t)(HAL_GetTick() - mqtt_command_fast_until) < 0) ? 1U : 0U;
 
     relay1_state = Relay_GetState(RELAY1);
     relay2_state = Relay_GetState(RELAY2);
@@ -890,10 +1001,38 @@ static void MQTT_RunRealtimeStatusPublisher(void)
         mqtt_status_last_relay1 = relay1_state;
         mqtt_status_last_relay2 = relay2_state;
         mqtt_status_snapshot_valid = 1U;
-        MQTT_RequestStatusPublishInternal();
+        if (fast_window_active != 0U)
+        {
+            mqtt_status_priority_requested = 1U;
+        }
+        else
+        {
+            MQTT_RequestStatusPublishInternal();
+        }
+    }
+
+    if (mqtt_status_priority_requested != 0U)
+    {
+        status = L610_MQTT_BuildStatusJson(mqtt_json_buf, sizeof(mqtt_json_buf));
+        if (status != L610_MQTT_OK)
+        {
+            return;
+        }
+
+        status = MQTT_QueuePriorityPublish(mqtt_config.topic_status, mqtt_json_buf, mqtt_config.default_qos, 1U);
+        if (status == L610_MQTT_OK)
+        {
+            mqtt_status_priority_requested = 0U;
+        }
+        return;
     }
 
     if (mqtt_status_publish_requested == 0U)
+    {
+        return;
+    }
+
+    if (fast_window_active != 0U && (mqtt_priority_count != 0U || mqtt_tx_inflight_priority != 0U))
     {
         return;
     }
@@ -913,6 +1052,12 @@ static void MQTT_RunRealtimeStatusPublisher(void)
 
 static void MQTT_RunOnlinePublisher(void)
 {
+    if (((int32_t)(HAL_GetTick() - mqtt_command_fast_until) < 0) &&
+        (mqtt_priority_count != 0U || mqtt_tx_inflight_priority != 0U))
+    {
+        return;
+    }
+
     if (L610_MQTT_IsConnected() == 0 || mqtt_online_publish_requested == 0U)
     {
         return;
@@ -933,7 +1078,7 @@ static void MQTT_RunLinkMaintenance(void)
         return;
     }
 
-    if (mqtt_async_len != 0U || mqtt_tx_inflight != 0U)
+    if (mqtt_async_len != 0U || mqtt_tx_inflight != 0U || mqtt_priority_count != 0U)
     {
         return;
     }
@@ -3133,7 +3278,8 @@ L610_MQTT_Status_t L610_MQTT_HandleCommand(char *cmd)
 
     if (mqtt_config.auto_publish_status && L610_MQTT_IsConnected())
     {
-        MQTT_RequestStatusPublishInternal();
+        mqtt_status_priority_requested = 1U;
+        mqtt_command_fast_until = HAL_GetTick() + MQTT_COMMAND_FAST_WINDOW_MS;
     }
 
     MQTT_EmitEvent(MQTT_EVENT_COMMAND_HANDLED, cmd_copy);

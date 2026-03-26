@@ -123,6 +123,14 @@ ApplicationWindow {
         appController.currentPage = currentPage
     }
 
+    onActiveChanged: {
+        if (!active)
+            return
+        if (!appController.authSession.authenticated)
+            return
+        appController.remoteSyncService.refreshVisibleData()
+    }
+
     onCurrentPageChanged: {
         const engineeringOnlyPages = ["engineering", "serial", "logs"]
         if (engineeringOnlyPages.indexOf(currentPage) >= 0 && !appController.engineeringMode)
