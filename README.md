@@ -220,22 +220,30 @@ $env:QXZ_CLIENT_DEFAULT_API_BASE = "https://api.qixiangzhan.online/api/v1"
 - [backend/README.md](backend/README.md)
 - [qt-client/README.md](qt-client/README.md)
 
-## Git 建议
+## 仓库协作约定
 
 建议提交到 Git 的内容：
 
-- 固件源码
+- 固件源码与头文件
 - `backend/` 后端源码
 - `qt-client/` 客户端源码
 - `docs/`
 - `deploy/linux/`
 - `scripts/`
+- Keil 工程定义文件：`*.uvprojx`、`*.sct`、`RTE_Components.h`、`*.dbgconf`
 
 不建议提交：
 
 - Python 虚拟环境
 - Qt / Android 构建目录
-- Keil 中间产物与映射文件
+- Keil 中间产物与输出文件：`.crf`、`.d`、`.dep`、`.map`、`.htm`、`.hex`、`.lnp`
+- 本机 Keil 配置文件：`MDK-ARM/qixiangzhan.uvoptx`
 - 本地数据库、日志、缓存
 - keystore、签名文件、`.env`
 - 临时 PDF、调试草稿和本地手册文件
+
+行尾与文本文件约定：
+
+- 源码、文档和普通配置文本默认使用 LF
+- Windows 启动脚本与 PowerShell 脚本保留 CRLF
+- 重新打开 Keil 工程后，如果只出现 `uvoptx`、`map`、`hex`、构建日志等变化，默认不要提交

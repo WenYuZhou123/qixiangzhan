@@ -45,6 +45,7 @@ compile_commands.json
 
 # Keil / STM32 generated intermediates
 MDK-ARM/*.bak
+MDK-ARM/*.uvoptx
 MDK-ARM/*.dep
 MDK-ARM/*.crf
 MDK-ARM/*.d
@@ -52,10 +53,12 @@ MDK-ARM/*.o
 MDK-ARM/*.axf
 MDK-ARM/*.map
 MDK-ARM/*.lst
+MDK-ARM/*.lnp
 MDK-ARM/Objects/
 MDK-ARM/Listings/
 MDK-ARM/*.uvguix.*
 MDK-ARM/**/*.bak
+MDK-ARM/**/*.uvoptx
 MDK-ARM/**/*.dep
 MDK-ARM/**/*.crf
 MDK-ARM/**/*.d
@@ -63,6 +66,7 @@ MDK-ARM/**/*.o
 MDK-ARM/**/*.axf
 MDK-ARM/**/*.map
 MDK-ARM/**/*.lst
+MDK-ARM/**/*.lnp
 MDK-ARM/**/*.htm
 MDK-ARM/**/*.hex
 
