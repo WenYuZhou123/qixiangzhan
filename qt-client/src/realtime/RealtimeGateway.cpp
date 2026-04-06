@@ -13,13 +13,163 @@
 
 namespace
 {
-constexpr int kDirectCommandTimeoutMs = 12000;
+constexpr int kDirectCommandTimeoutMs = 18000;
+constexpr qint64 kStatusTimestampSlackMs = 1500;
 
 bool isLegacyStatusTopic(const QString &topicName)
 {
     return topicName.startsWith(QStringLiteral("device/")) &&
            topicName.endsWith(QStringLiteral("/status")) &&
            !topicName.endsWith(QStringLiteral("/up/status"));
+}
+
+QString readStringLike(const QJsonValue &value, const QString &fallback = QString())
+{
+    if (value.isString())
+    {
+        return value.toString();
+    }
+
+    return fallback;
+}
+
+bool readBoolLike(const QJsonValue &value, bool fallback = false)
+{
+    if (value.isBool())
+    {
+        return value.toBool();
+    }
+    if (value.isDouble())
+    {
+        return value.toInt() != 0;
+    }
+    if (value.isString())
+    {
+        const QString lowered = value.toString().trimmed().toLower();
+        if (lowered == QStringLiteral("1") ||
+            lowered == QStringLiteral("true") ||
+            lowered == QStringLiteral("yes") ||
+            lowered == QStringLiteral("on") ||
+            lowered == QStringLiteral("open"))
+        {
+            return true;
+        }
+        if (lowered == QStringLiteral("0") ||
+            lowered == QStringLiteral("false") ||
+            lowered == QStringLiteral("no") ||
+            lowered == QStringLiteral("off") ||
+            lowered == QStringLiteral("closed"))
+        {
+            return false;
+        }
+    }
+
+    return fallback;
+}
+
+qint64 readLongLongLike(const QJsonValue &value, qint64 fallback = 0)
+{
+    if (value.isDouble())
+    {
+        return static_cast<qint64>(value.toDouble());
+    }
+    if (value.isString())
+    {
+        bool ok = false;
+        const qint64 parsed = value.toString().toLongLong(&ok);
+        return ok ? parsed : fallback;
+    }
+
+    return fallback;
+}
+
+QDateTime parseIsoTimestamp(const QString &value)
+{
+    QDateTime parsed = QDateTime::fromString(value, Qt::ISODateWithMs);
+    if (!parsed.isValid())
+    {
+        parsed = QDateTime::fromString(value, Qt::ISODate);
+    }
+    if (parsed.isValid())
+    {
+        parsed = parsed.toUTC();
+    }
+    return parsed;
+}
+
+QString readPadState(const QJsonObject &status, const QString &key)
+{
+    if (status.contains(QStringLiteral("pad")) && status.value(QStringLiteral("pad")).isObject())
+    {
+        return readStringLike(status.value(QStringLiteral("pad")).toObject().value(key));
+    }
+
+    return readStringLike(status.value(key));
+}
+
+bool statusMatchesCommandOutcome(const QJsonObject &status,
+                                 const QString &command,
+                                 int value,
+                                 bool hasValue)
+{
+    const bool relay1On = readBoolLike(status.value(QStringLiteral("relay1")));
+    const bool relay2On = readBoolLike(status.value(QStringLiteral("relay2")));
+    const QString leftState = readPadState(status, QStringLiteral("left_state")).toLower();
+    const QString rightState = readPadState(status, QStringLiteral("right_state")).toLower();
+
+    if (command == QStringLiteral("query_status") || command == QStringLiteral("query_pad_status"))
+    {
+        return true;
+    }
+    if (command == QStringLiteral("set_r1") && hasValue)
+    {
+        return relay1On == (value != 0);
+    }
+    if (command == QStringLiteral("set_r2") && hasValue)
+    {
+        return relay2On == (value != 0);
+    }
+    if (command == QStringLiteral("set_all") && hasValue)
+    {
+        const bool enabled = value != 0;
+        return relay1On == enabled && relay2On == enabled;
+    }
+    if (command == QStringLiteral("pad_open"))
+    {
+        return (relay1On && relay2On) || (leftState == QStringLiteral("open") && rightState == QStringLiteral("open"));
+    }
+    if (command == QStringLiteral("pad_close"))
+    {
+        return ((!relay1On && !relay2On) ||
+                (leftState == QStringLiteral("closed") && rightState == QStringLiteral("closed")));
+    }
+    if (command == QStringLiteral("pad_stop"))
+    {
+        return true;
+    }
+
+    return false;
+}
+
+bool statusIsFreshEnough(const QJsonObject &status, qint64 baselineTick, qint64 pendingStartedMs)
+{
+    const qint64 statusTick = readLongLongLike(status.value(QStringLiteral("tick")), 0);
+    if (statusTick > 0 && baselineTick > 0)
+    {
+        return statusTick > baselineTick;
+    }
+    if (statusTick > 0)
+    {
+        return true;
+    }
+
+    const QDateTime timestamp = parseIsoTimestamp(readStringLike(status.value(QStringLiteral("timestamp"))));
+    if (timestamp.isValid() && pendingStartedMs > 0)
+    {
+        return timestamp.toMSecsSinceEpoch() >= (pendingStartedMs - kStatusTimestampSlackMs);
+    }
+
+    return false;
 }
 
 QJsonDocument parseJsonPayloadCompat(const QByteArray &payload, QJsonParseError *outError, bool *usedFallback = nullptr)
@@ -458,6 +608,7 @@ void RealtimeGateway::handleStateChanged(QMqttClient::ClientState state)
         if (m_commandTracker->pending())
         {
             m_commandTracker->failPending(QStringLiteral("Broker disconnected"));
+            clearPendingCommandState();
         }
 
         if (!alarmDeviceId.isEmpty())
@@ -527,6 +678,7 @@ void RealtimeGateway::handleMessageReceived(const QByteArray &payload, const QMq
         }
         m_stateStore->updateStatus(object);
         persistStateForDevice(object.value(QStringLiteral("device_id")).toString(topicDeviceId));
+        tryResolvePendingCommandFromStatus(object);
         return;
     }
 
@@ -543,6 +695,7 @@ void RealtimeGateway::handleMessageReceived(const QByteArray &payload, const QMq
         if (m_commandTracker->matchesPending(ack.msgId))
         {
             m_commandTracker->resolveAck(ack.msgId);
+            clearPendingCommandState();
         }
         if (ack.result.compare(QStringLiteral("success"), Qt::CaseInsensitive) != 0)
         {
@@ -620,6 +773,7 @@ void RealtimeGateway::handleCommandTimeout(const QString &msgId, const QString &
         return;
     }
 
+    clearPendingCommandState();
     const QString deviceId = m_lastCommandDeviceId.isEmpty() ? currentDeviceId() : m_lastCommandDeviceId;
     m_stateStore->setLastError(QStringLiteral("%1 超时 (%2)").arg(command, msgId));
     m_cache->updateOutboxStatus(msgId, QStringLiteral("ack_timeout"), QStringLiteral("ACK timeout"));
@@ -821,6 +975,7 @@ bool RealtimeGateway::publishCommand(const QString &command, int value, bool has
     }
 
     m_lastCommandDeviceId = deviceId;
+    rememberPendingCommandState(deviceId, msgId, command, value, hasValue);
     m_commandTracker->startPending(msgId, command, value, hasValue, kDirectCommandTimeoutMs);
     m_stateStore->applyPredictedCommand(deviceId, command, value, hasValue);
     if (m_deviceRepository != nullptr)
@@ -992,4 +1147,94 @@ void RealtimeGateway::rememberLegacyTopic(const QString &deviceId, const QString
 
     m_legacyCommandTopics.insert(deviceId, commandTopic);
     appendLog(QStringLiteral("Detected legacy topic for %1 -> %2").arg(deviceId, commandTopic));
+}
+
+void RealtimeGateway::rememberPendingCommandState(const QString &deviceId,
+                                                  const QString &msgId,
+                                                  const QString &command,
+                                                  int value,
+                                                  bool hasValue)
+{
+    m_pendingCommandDeviceId = deviceId;
+    m_pendingCommandMsgId = msgId;
+    m_pendingCommandName = command;
+    m_pendingCommandValue = value;
+    m_pendingCommandHasValue = hasValue;
+    m_pendingCommandStartedMs = QDateTime::currentMSecsSinceEpoch();
+    m_pendingBaselineTick = 0;
+
+    if (m_stateStore != nullptr && !deviceId.isEmpty())
+    {
+        m_pendingBaselineTick = m_stateStore->stateForDevice(deviceId).tick;
+    }
+}
+
+void RealtimeGateway::clearPendingCommandState()
+{
+    m_pendingCommandDeviceId.clear();
+    m_pendingCommandMsgId.clear();
+    m_pendingCommandName.clear();
+    m_pendingCommandValue = 0;
+    m_pendingCommandHasValue = false;
+    m_pendingCommandStartedMs = 0;
+    m_pendingBaselineTick = 0;
+}
+
+bool RealtimeGateway::tryResolvePendingCommandFromStatus(const QJsonObject &statusObject)
+{
+    if (m_commandTracker == nullptr || !m_commandTracker->pending())
+    {
+        return false;
+    }
+
+    const QString deviceId = readStringLike(statusObject.value(QStringLiteral("device_id")));
+    const QString pendingMsgId = m_commandTracker->pendingMsgId();
+    if (deviceId.isEmpty() ||
+        pendingMsgId.isEmpty() ||
+        m_pendingCommandDeviceId.isEmpty() ||
+        m_pendingCommandMsgId.isEmpty() ||
+        pendingMsgId != m_pendingCommandMsgId ||
+        deviceId != m_pendingCommandDeviceId)
+    {
+        return false;
+    }
+
+    if (!statusIsFreshEnough(statusObject, m_pendingBaselineTick, m_pendingCommandStartedMs))
+    {
+        return false;
+    }
+
+    if (!statusMatchesCommandOutcome(statusObject,
+                                     m_pendingCommandName,
+                                     m_pendingCommandValue,
+                                     m_pendingCommandHasValue))
+    {
+        return false;
+    }
+
+    m_commandTracker->resolveAck(pendingMsgId);
+    if (m_cache != nullptr)
+    {
+        m_cache->updateOutboxStatus(pendingMsgId,
+                                    QStringLiteral("ack_success"),
+                                    QStringLiteral("Resolved from status report"));
+    }
+    if (m_stateStore != nullptr)
+    {
+        m_stateStore->noteAckStatus(QStringLiteral("%1 -> success (status)")
+                                        .arg(m_pendingCommandName),
+                                    QStringLiteral("success"));
+        m_stateStore->clearLastError();
+    }
+    if (m_alarmRepository != nullptr)
+    {
+        m_alarmRepository->resolveAlarm(deviceId, QStringLiteral("ack_timeout"));
+        m_alarmRepository->resolveAlarm(deviceId, QStringLiteral("command_error"));
+        syncAlarmCounts();
+    }
+
+    appendLog(QStringLiteral("Resolved pending command from status msg_id=%1 cmd=%2")
+                  .arg(pendingMsgId, m_pendingCommandName));
+    clearPendingCommandState();
+    return true;
 }
