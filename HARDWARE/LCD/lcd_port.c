@@ -12,6 +12,11 @@
 #define LCD_NATIVE_WIDTH              480U
 #define LCD_NATIVE_HEIGHT             800U
 #define LCD_DRIVER_PID                0x61U
+#define LCD_BACKLIGHT_REG             0xBEU
+#define LCD_BACKLIGHT_PWM_MODE        0x05U
+#define LCD_BACKLIGHT_PWM_ENABLE      0x01U
+#define LCD_BACKLIGHT_PWM_PERIOD      0xFFU
+#define LCD_BACKLIGHT_PWM_RESERVED    0x00U
 
 #define LCD_FMC_BANK                  FMC_NORSRAM_BANK1
 #define LCD_FMC_BANK_ADDR             0x60000000U
@@ -110,6 +115,25 @@ static inline uint16_t lcd_fmc_read_dat(void)
     __NOP();
     __NOP();
     return LCD_FMC_DAT_REG;
+}
+
+static void lcd_write_backlight_register(uint8_t percent)
+{
+    uint16_t pwm;
+
+    if (percent > 100U)
+    {
+        percent = 100U;
+    }
+
+    pwm = (uint16_t)(((uint32_t)percent * 255U) / 100U);
+    lcd_fmc_write_cmd(LCD_BACKLIGHT_REG);
+    lcd_fmc_write_dat(LCD_BACKLIGHT_PWM_MODE);
+    lcd_fmc_write_dat(pwm);
+    lcd_fmc_write_dat(LCD_BACKLIGHT_PWM_ENABLE);
+    lcd_fmc_write_dat(LCD_BACKLIGHT_PWM_PERIOD);
+    lcd_fmc_write_dat(LCD_BACKLIGHT_PWM_RESERVED);
+    lcd_fmc_write_dat(LCD_BACKLIGHT_PWM_RESERVED);
 }
 
 static void lcd_mpu_config(void)
@@ -265,13 +289,7 @@ static void lcd_reg_init(void)
     lcd_fmc_write_cmd(0xD0U);
     lcd_fmc_write_dat(0x00U);
 
-    lcd_fmc_write_cmd(0xBEU);
-    lcd_fmc_write_dat(0x05U);
-    lcd_fmc_write_dat(0xFEU);
-    lcd_fmc_write_dat(0x01U);
-    lcd_fmc_write_dat(0x00U);
-    lcd_fmc_write_dat(0x00U);
-    lcd_fmc_write_dat(0x00U);
+    lcd_write_backlight_register(100U);
 
     lcd_fmc_write_cmd(0xB8U);
     lcd_fmc_write_dat(0x03U);
@@ -720,16 +738,7 @@ void LCD_Port_DrawText(uint16_t x, uint16_t y, const char *text, uint16_t color,
 
 void LCD_Port_SetBacklight(uint8_t percent)
 {
-    uint16_t pwm;
-
-    pwm = (uint16_t)(((uint32_t)percent * 255U) / 100U);
-    lcd_fmc_write_cmd(0xBEU);
-    lcd_fmc_write_dat(0x05U);
-    lcd_fmc_write_dat(pwm);
-    lcd_fmc_write_dat(0x01U);
-    lcd_fmc_write_dat(0xFFU);
-    lcd_fmc_write_dat(0x00U);
-    lcd_fmc_write_dat(0x00U);
+    lcd_write_backlight_register(percent);
 }
 
 uint16_t LCD_Port_GetWidth(void)

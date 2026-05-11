@@ -5,97 +5,123 @@ import QtQuick.Layouts
 Pane {
     id: root
     property var controller
+    property string directionFilter: "all"
+    property string resultFilter: "all"
     readonly property bool mobile: controller && controller.androidMode
+
+    TaskTheme { id: theme }
+
+    function resultGroup(result) {
+        const normalized = (result || "").toLowerCase()
+        if (normalized.length === 0 || normalized === "pending" || normalized === "queued" || normalized === "sent")
+            return "pending"
+        if (normalized === "success" || normalized === "ack_success" || normalized === "ack")
+            return "success"
+        if (normalized.indexOf("timeout") >= 0)
+            return "timeout"
+        return "failed"
+    }
+
+    function matchesFilter(direction, result) {
+        if (directionFilter !== "all" && direction !== directionFilter)
+            return false
+        if (resultFilter !== "all" && resultGroup(result) !== resultFilter)
+            return false
+        return true
+    }
 
     padding: 0
     background: Rectangle {
-        radius: mobile ? 28 : 30
-        color: "#ffffff"
-        border.color: "#d2dde3"
+        radius: theme.radiusLarge
+        color: theme.surfacePrimary
+        border.color: theme.borderSoft
         border.width: 1
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: mobile ? 16 : 18
-        spacing: 14
+        anchors.margins: mobile ? 12 : 14
+        spacing: 12
 
         Rectangle {
             Layout.fillWidth: true
-            radius: 26
-            implicitHeight: mobile ? 168 : 144
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: "#112436" }
-                GradientStop { position: 0.55; color: "#1f4259" }
-                GradientStop { position: 1.0; color: "#4d6f84" }
-            }
-            border.color: "#6f93a8"
+            implicitHeight: mobile ? 130 : 116
+            radius: theme.radiusLarge
+            color: theme.navSurface
+            border.color: "#2f3d4c"
             border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: mobile ? 18 : 20
-                spacing: 10
+                anchors.margins: 14
+                spacing: 8
 
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 10
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 3
+                        spacing: 2
 
                         Label {
+                            Layout.fillWidth: true
                             text: "命令与消息历史"
-                            color: "#f4efe4"
-                            font.pixelSize: mobile ? 26 : 30
+                            color: theme.textPrimary
+                            font.pixelSize: mobile ? 24 : 26
                             font.bold: true
+                            elide: Text.ElideRight
                         }
 
                         Label {
+                            Layout.fillWidth: true
                             text: controller.historyRepository.currentDeviceId.length > 0
-                                  ? "当前过滤设备: " + controller.historyRepository.currentDeviceId
-                                  : "显示全部缓存与云端同步后的消息"
-                            color: "#d0deea"
-                            font.pixelSize: mobile ? 15 : 13
+                                  ? "当前设备 " + controller.historyRepository.currentDeviceId
+                                  : "显示全部缓存与云端同步消息"
+                            color: "#b9c7d1"
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
                         }
                     }
 
-                    Button {
+                    OpsButton {
                         text: "刷新"
-                        font.pixelSize: mobile ? 17 : 14
+                        Layout.preferredWidth: 86
                         onClicked: root.controller.refreshHistory()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#122635"
-                            font: parent.font
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: 22
-                            color: "#f0d8ba"
-                            border.color: "#faecd8"
-                            border.width: 1
-                        }
                     }
                 }
 
-                Label {
-                    text: "发送与接收统一收口，便于排查延迟、重发和命令确认。"
-                    color: "#e5eef4"
-                    font.pixelSize: mobile ? 16 : 13
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    StatusPill { textLabel: "全部"; fill: root.directionFilter === "all" ? theme.pending : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.directionFilter = "all" } }
+                    StatusPill { textLabel: "TX"; fill: root.directionFilter === "out" ? theme.warning : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.directionFilter = "out" } }
+                    StatusPill { textLabel: "RX"; fill: root.directionFilter === "in" ? theme.success : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.directionFilter = "in" } }
+                    Item { Layout.fillWidth: true }
                 }
             }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            StatusPill { textLabel: "全部结果"; fill: root.resultFilter === "all" ? theme.pending : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.resultFilter = "all" } }
+            StatusPill { textLabel: "pending"; fill: root.resultFilter === "pending" ? theme.pending : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.resultFilter = "pending" } }
+            StatusPill { textLabel: "success"; fill: root.resultFilter === "success" ? theme.success : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.resultFilter = "success" } }
+            StatusPill { textLabel: "failed"; fill: root.resultFilter === "failed" ? theme.danger : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.resultFilter = "failed" } }
+            StatusPill { textLabel: "timeout"; fill: root.resultFilter === "timeout" ? theme.warning : theme.offline; MouseArea { anchors.fill: parent; onClicked: root.resultFilter = "timeout" } }
+            Item { Layout.fillWidth: true }
         }
 
         ListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            spacing: 10
+            spacing: 8
             model: root.controller.historyRepository
+            ScrollBar.vertical: ScrollBar {}
 
             delegate: Rectangle {
                 required property string deviceId
@@ -107,83 +133,85 @@ Pane {
                 required property string result
                 required property string createdAt
 
-                width: ListView.view.width
-                radius: 22
-                color: direction === "out" ? "#f7efe4" : "#eef6f9"
-                border.color: direction === "out" ? "#d8bd89" : "#b7d4df"
-                border.width: 1
-                implicitHeight: historyColumn.implicitHeight + 26
+                readonly property string group: root.resultGroup(result)
+                readonly property bool match: root.matchesFilter(direction, result)
 
-                Column {
+                width: ListView.view.width
+                visible: match
+                height: match ? implicitHeight : 0
+                radius: theme.radiusMedium
+                color: direction === "out" ? "#fff7ec" : "#eef8fb"
+                border.color: direction === "out" ? "#e0c38e" : "#b8dce5"
+                border.width: 1
+                implicitHeight: historyColumn.implicitHeight + 24
+
+                ColumnLayout {
                     id: historyColumn
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: 14
+                    anchors.top: parent.top
+                    anchors.margins: 12
                     spacing: 8
 
-                    Row {
-                        spacing: 10
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
 
-                        Rectangle {
-                            radius: 12
-                            color: direction === "out" ? "#e7d1a8" : "#cfe5ee"
-                            implicitHeight: 24
-                            implicitWidth: 74
+                        StatusPill {
+                            textLabel: direction === "out" ? "TX" : "RX"
+                            fill: direction === "out" ? theme.warning : theme.success
+                        }
 
-                            Label {
-                                anchors.centerIn: parent
-                                text: direction === "out" ? "TX" : "RX"
-                                color: "#132635"
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
+                        StatusPill {
+                            textLabel: group
+                            fill: theme.statusColor(group)
                         }
 
                         Label {
+                            Layout.fillWidth: true
                             text: createdAt
-                            color: "#253948"
-                            font.pixelSize: mobile ? 15 : 13
-                            font.bold: true
-                        }
-
-                        Label {
-                            text: "[" + channel + "]"
-                            color: "#60717e"
-                            font.pixelSize: mobile ? 15 : 12
+                            color: theme.textMuted
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
                         }
                     }
 
                     Label {
+                        Layout.fillWidth: true
                         text: command.length > 0 ? command : topic
                         wrapMode: Text.WrapAnywhere
-                        color: "#102534"
-                        font.pixelSize: mobile ? 20 : 17
+                        color: theme.textBody
+                        font.pixelSize: mobile ? 18 : 16
                         font.bold: true
                     }
 
                     Label {
-                        text: deviceId
-                        color: "#617280"
-                        font.pixelSize: mobile ? 16 : 13
+                        Layout.fillWidth: true
+                        text: deviceId + " / " + channel
+                        color: theme.textMuted
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
                     }
 
                     Label {
+                        Layout.fillWidth: true
                         text: payload
                         wrapMode: Text.WrapAnywhere
-                        color: "#465863"
-                        font.pixelSize: mobile ? 15 : 13
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        color: "#455560"
+                        font.pixelSize: mobile ? 14 : 12
                     }
 
                     Label {
-                        text: result.length > 0 ? "结果: " + result : "等待结果"
-                        color: result.length > 0 ? "#2c6d4e" : "#6b7c88"
-                        font.pixelSize: mobile ? 15 : 13
+                        Layout.fillWidth: true
+                        text: result.length > 0 ? "结果 " + result : "等待结果"
+                        color: theme.statusColor(group)
+                        font.pixelSize: 13
+                        font.bold: true
                     }
                 }
             }
-
-            ScrollBar.vertical: ScrollBar {}
         }
     }
 }

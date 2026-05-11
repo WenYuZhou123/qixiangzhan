@@ -35,6 +35,8 @@ static char s_last_control_message[APP_STATUS_TEXT_LEN];
 #define LCD_TOUCH_TAP_THRESHOLD       20U
 #define LCD_TOUCH_DEBOUNCE_MS         180U
 #define LCD_CONTROL_BUSY_MS           320U
+#define LCD_UI_MIN_RENDER_INTERVAL_MS 50U
+#define LCD_UI_KEEPALIVE_RENDER_MS    500U
 
 static void lcd_diag_print(const char *text)
 {
@@ -396,19 +398,27 @@ void LCD_DebugUI_Task(void)
     s_work_status.lcd_refresh_count = s_refresh_count;
 
     control_changed = lcd_control_feedback_changed();
-    if ((s_force_render == 0U) &&
-        (s_has_last_status != 0U) &&
-        (control_changed == 0U) &&
-        (lcd_status_changed(&s_work_status, &s_last_status) == 0U))
+    if ((s_force_render == 0U) && (control_changed == 0U))
     {
-        return;
-    }
+        uint8_t status_changed = 1U;
+        uint32_t elapsed = HAL_GetTick() - s_last_refresh_tick;
 
-    if ((s_force_render == 0U) &&
-        (control_changed == 0U) &&
-        ((HAL_GetTick() - s_last_refresh_tick) < 800U))
-    {
-        return;
+        if (s_has_last_status != 0U)
+        {
+            status_changed = lcd_status_changed(&s_work_status, &s_last_status);
+        }
+
+        if (status_changed != 0U)
+        {
+            if (elapsed < LCD_UI_MIN_RENDER_INTERVAL_MS)
+            {
+                return;
+            }
+        }
+        else if (elapsed < LCD_UI_KEEPALIVE_RENDER_MS)
+        {
+            return;
+        }
     }
 
     s_last_refresh_tick = HAL_GetTick();

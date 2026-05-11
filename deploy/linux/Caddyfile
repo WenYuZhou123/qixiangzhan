@@ -1,4 +1,4 @@
-api.qixiangzhan.online {
+qixiangzhan.online, www.qixiangzhan.online {
     encode gzip zstd
 
     @health path /healthz

@@ -1,47 +1,50 @@
 import QtQuick
 
 QtObject {
-    readonly property color shellTop: "#0c1823"
-    readonly property color shellMid: "#132a39"
-    readonly property color shellBottom: "#2a4352"
-    readonly property color pageSurface: "#edf3f5"
-    readonly property color surfacePrimary: "#fbfdfe"
-    readonly property color surfaceSecondary: "#f2f7f9"
-    readonly property color surfaceTint: "#dfeaf0"
-    readonly property color glassStrong: "#eef4f6"
-    readonly property color glassSoft: "#f7fbfc"
-    readonly property color borderStrong: "#6b8798"
-    readonly property color borderSoft: "#cad7df"
-    readonly property color textPrimary: "#f2f6f8"
-    readonly property color textBody: "#17303f"
-    readonly property color textMuted: "#67808f"
-    readonly property color accentCyan: "#7bc1cf"
-    readonly property color accentCyanDeep: "#295b6d"
-    readonly property color accentOrange: "#c8915f"
-    readonly property color accentSand: "#ead9ca"
-    readonly property color success: "#4e7d72"
-    readonly property color warning: "#9b754f"
-    readonly property color danger: "#8d5d64"
-    readonly property color neutral: "#d7e1e6"
+    readonly property color shellTop: "#111821"
+    readonly property color shellMid: "#172333"
+    readonly property color shellBottom: "#202b37"
+    readonly property color navSurface: "#151f2b"
+    readonly property color pageSurface: "#eef2f5"
+    readonly property color surfacePrimary: "#ffffff"
+    readonly property color surfaceSecondary: "#f6f8fa"
+    readonly property color surfaceTint: "#e8eef2"
+    readonly property color glassStrong: "#e7eef3"
+    readonly property color glassSoft: "#f8fafb"
+    readonly property color borderStrong: "#526675"
+    readonly property color borderSoft: "#ccd6dd"
+    readonly property color textPrimary: "#f3f7fa"
+    readonly property color textBody: "#182631"
+    readonly property color textMuted: "#637381"
+    readonly property color accentCyan: "#58a6b4"
+    readonly property color accentCyanDeep: "#256a7a"
+    readonly property color accentOrange: "#b97837"
+    readonly property color accentSand: "#e7ded2"
+    readonly property color success: "#227a55"
+    readonly property color warning: "#b7791f"
+    readonly property color danger: "#b23a48"
+    readonly property color offline: "#7a8792"
+    readonly property color pending: "#2f6fb2"
+    readonly property color neutral: "#dce4e9"
 
-    readonly property int breakpointCompact: 420
-    readonly property int breakpointTablet: 600
+    readonly property int breakpointCompact: 520
+    readonly property int breakpointTablet: 820
     readonly property int touchTarget: 50
     readonly property int pageMarginMobile: 14
     readonly property int pageMarginDesktop: 18
     readonly property int cardGap: 12
     readonly property int sectionGap: 14
 
-    readonly property real radiusLarge: 30
-    readonly property real radiusMedium: 22
-    readonly property real radiusSmall: 16
+    readonly property real radiusLarge: 10
+    readonly property real radiusMedium: 8
+    readonly property real radiusSmall: 6
 
     function heroTitleSize(mobile) {
-        return mobile ? 28 : 36
+        return mobile ? 24 : 28
     }
 
     function pageTitleSize(mobile) {
-        return mobile ? 24 : 22
+        return mobile ? 20 : 19
     }
 
     function bodySize(mobile) {
@@ -49,27 +52,41 @@ QtObject {
     }
 
     function labelSize(mobile) {
-        return mobile ? 13 : 12
+        return mobile ? 12 : 12
     }
 
     function actionSize(mobile) {
-        return mobile ? 16 : 14
+        return mobile ? 15 : 14
+    }
+
+    function statusColor(status) {
+        const normalized = (status || "").toString().toLowerCase()
+        if (normalized === "ok" || normalized === "online" || normalized === "connected" ||
+            normalized === "success" || normalized === "ack" || normalized === "ack_success")
+            return success
+        if (normalized === "warning" || normalized === "degraded" || normalized === "queued" ||
+            normalized === "sent" || normalized === "pending")
+            return normalized === "pending" || normalized === "queued" || normalized === "sent" ? pending : warning
+        if (normalized === "critical" || normalized === "error" || normalized === "failed" ||
+            normalized === "timeout" || normalized === "ack_timeout" || normalized === "offline")
+            return normalized === "offline" ? offline : danger
+        return offline
     }
 
     function stateColor(state) {
         switch (state) {
         case "open":
+        case "closed":
             return success
         case "opening":
-            return accentCyanDeep
         case "closing":
-            return warning
+            return pending
         case "stopped":
-            return accentOrange
+            return warning
         case "fault":
             return danger
         default:
-            return "#617c8a"
+            return offline
         }
     }
 
@@ -103,7 +120,7 @@ QtObject {
         case "Cloud Error":
             return "接口异常"
         case "Cloud Parse Error":
-            return "响应解析错误"
+            return "解析错误"
         case "Authentication Required":
             return "需要登录"
         case "API idle":
@@ -165,22 +182,5 @@ QtObject {
         default:
             return mode && mode.length > 0 ? mode : "未知"
         }
-    }
-
-    function flightRuleText(windSpeed, visibility) {
-        if (windSpeed > 15 || visibility < 2)
-            return "禁飞"
-        if (windSpeed > 10 || visibility < 5)
-            return "谨慎"
-        return "适航"
-    }
-
-    function flightRuleColor(windSpeed, visibility) {
-        const rule = flightRuleText(windSpeed, visibility)
-        if (rule === "禁飞")
-            return danger
-        if (rule === "谨慎")
-            return warning
-        return success
     }
 }

@@ -1,14 +1,15 @@
-# Public Remote Deployment
+# Linux / Jetson 部署包
 
-This folder contains a production-oriented Linux deployment skeleton for the remote-access version of the platform.
+这个目录放 Jetson 或 Linux 主机部署后端时需要的样例文件。当前公网入口采用 Cloudflare Tunnel，腾讯云 80/443 直连不再作为验收条件。
 
-## Files
+## 文件
 
-- `Caddyfile`: HTTPS reverse proxy sample for `api.qixiangzhan.online`
-- `qixiangzhan-backend.service`: systemd service for FastAPI
-- `backup_mysql.sh`: daily MySQL backup script with 7-day retention
+- `qixiangzhan-backend.service`：FastAPI systemd 服务，启动前执行 Alembic 迁移。
+- `backup_mysql.sh`：MySQL 每日备份脚本，默认保留 7 天。
+- `Caddyfile`：本机反向代理样例，可用于 Jetson 本地 HTTP/HTTPS 入口或 tunnel 前置代理。
+- `../../backend/alembic/`：后端数据库版本迁移。
 
-## Recommended layout
+## 推荐目录
 
 ```text
 /opt/qixiangzhan/
@@ -16,32 +17,61 @@ This folder contains a production-oriented Linux deployment skeleton for the rem
     .venv/
     app/
     .env
+  deploy/
+    linux/
   backups/
 ```
 
-## Deployment steps
+## Jetson 部署步骤
 
-1. Copy `backend/` to the Linux host.
-2. Create `/opt/qixiangzhan/backend/.env` with production secrets.
-3. Install Python, MySQL client tools, and Caddy.
-4. Copy `qixiangzhan-backend.service` to `/etc/systemd/system/`.
-5. Add an `A` record so `api.qixiangzhan.online` points to the cloud server public IP.
-6. Copy `Caddyfile` to `/etc/caddy/Caddyfile`.
-7. Keep only `80/443` open on the firewall. Do not expose MySQL `3306`.
-8. Enable and start the backend and Caddy:
+1. 把 `backend/` 和 `deploy/linux/` 放到 `/opt/qixiangzhan/`。
+2. 创建 `/opt/qixiangzhan/backend/.env`，写入 MySQL、MQTT、Token 和公网 API 配置。
+3. 安装 Python、MySQL client、Caddy、cloudflared。
+4. 执行迁移：
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now qixiangzhan-backend
-sudo systemctl enable --now caddy
+cd /opt/qixiangzhan/backend
+alembic -c alembic.ini upgrade head
 ```
 
-9. Add a daily cron entry for backups:
+5. 安装并启动 systemd 服务：
 
 ```bash
-0 3 * * * /opt/qixiangzhan/deploy/linux/backup_mysql.sh
+sudo cp /opt/qixiangzhan/deploy/linux/qixiangzhan-backend.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now qixiangzhan-backend
+```
+
+6. 配置 Cloudflare Tunnel，把公网主机名转发到本机后端或 Caddy：
+
+```text
+qixiangzhan.online -> http://127.0.0.1:8000
+www.qixiangzhan.online -> http://127.0.0.1:8000
+```
+
+如果本机使用 Caddy 作为前置代理，则 tunnel service 填 Caddy 监听地址。
+
+## 健康检查
+
+本机：
+
+```bash
+curl -i http://127.0.0.1:8000/healthz
+```
+
+公网：
+
+```bash
+curl -i https://qixiangzhan.online/healthz
+curl -i https://qixiangzhan.online/openapi.json
+```
+
+系统健康：
+
+```text
+GET /api/v1/system/health
 ```
 
 ## Navicat
 
-Do not expose MySQL `3306` publicly. Use SSH tunnel from Navicat to the Linux host.
+不要把 MySQL `3306` 暴露到公网。Navicat 推荐通过 SSH Tunnel 或 Cloudflare 内网访问方案连接 Jetson。

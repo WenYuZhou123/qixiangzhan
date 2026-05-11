@@ -51,6 +51,11 @@ QJsonObject stateToJson(const DeviceState &state)
     json.insert(QStringLiteral("weather_humidity"), state.humidity);
     json.insert(QStringLiteral("weather_pressure"), state.pressure);
     json.insert(QStringLiteral("weather_visibility"), state.visibility);
+    json.insert(QStringLiteral("weather_capability_wind"), state.windCapability);
+    json.insert(QStringLiteral("weather_capability_air"), state.airCapability);
+    json.insert(QStringLiteral("weather_capability_rain"), state.rainCapability);
+    json.insert(QStringLiteral("weather_capability_pressure"), state.pressureCapability);
+    json.insert(QStringLiteral("weather_capability_visibility"), state.visibilityCapability);
     json.insert(QStringLiteral("weather_rain_detected"), state.rainDetected);
     json.insert(QStringLiteral("weather_rain_value"), state.rainValue);
     json.insert(QStringLiteral("weather_pm25"), state.pm25);
@@ -136,6 +141,11 @@ bool SQLiteCache::initialize()
             "humidity REAL DEFAULT 0,"
             "pressure REAL DEFAULT 0,"
             "visibility REAL DEFAULT 0,"
+            "capability_wind INTEGER DEFAULT 1,"
+            "capability_air INTEGER DEFAULT 1,"
+            "capability_rain INTEGER DEFAULT 1,"
+            "capability_pressure INTEGER DEFAULT 0,"
+            "capability_visibility INTEGER DEFAULT 0,"
             "rain_detected INTEGER DEFAULT 0,"
             "rain_value REAL DEFAULT 0,"
             "pm25 REAL DEFAULT 0,"
@@ -230,6 +240,11 @@ bool SQLiteCache::initialize()
         !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("humidity"), QStringLiteral("REAL NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("pressure"), QStringLiteral("REAL NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("visibility"), QStringLiteral("REAL NOT NULL DEFAULT 0")) ||
+        !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("capability_wind"), QStringLiteral("INTEGER NOT NULL DEFAULT 1")) ||
+        !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("capability_air"), QStringLiteral("INTEGER NOT NULL DEFAULT 1")) ||
+        !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("capability_rain"), QStringLiteral("INTEGER NOT NULL DEFAULT 1")) ||
+        !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("capability_pressure"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
+        !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("capability_visibility"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("rain_detected"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("rain_value"), QStringLiteral("REAL NOT NULL DEFAULT 0")) ||
         !ensureColumn(QStringLiteral("devices_cache"), QStringLiteral("pm25"), QStringLiteral("REAL NOT NULL DEFAULT 0")) ||
@@ -320,8 +335,9 @@ void SQLiteCache::upsertDeviceState(const DeviceState &state)
         "INSERT INTO devices_cache(device_id, display_name, protocol_profile, operator_name, ip, last_seen, last_seen_ms, rssi, "
         "relay1, relay2, pad_left_state, pad_right_state, pad_ready, pad_occupied, pad_mode, online, state_text, tick, "
         "wind_speed, wind_direction, wind_speed_raw, wind_direction_raw, rain_adc_raw, wind_direction_text, rain_level_text, "
-        "temperature, humidity, pressure, visibility, rain_detected, rain_value, pm25, pm10, co2, tvoc, ch2o, timestamp, active_alarm_count) "
-        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "temperature, humidity, pressure, visibility, capability_wind, capability_air, capability_rain, capability_pressure, capability_visibility, "
+        "rain_detected, rain_value, pm25, pm10, co2, tvoc, ch2o, timestamp, active_alarm_count) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(device_id) DO UPDATE SET "
         "display_name = excluded.display_name, "
         "protocol_profile = excluded.protocol_profile, "
@@ -351,6 +367,11 @@ void SQLiteCache::upsertDeviceState(const DeviceState &state)
         "humidity = excluded.humidity, "
         "pressure = excluded.pressure, "
         "visibility = excluded.visibility, "
+        "capability_wind = excluded.capability_wind, "
+        "capability_air = excluded.capability_air, "
+        "capability_rain = excluded.capability_rain, "
+        "capability_pressure = excluded.capability_pressure, "
+        "capability_visibility = excluded.capability_visibility, "
         "rain_detected = excluded.rain_detected, "
         "rain_value = excluded.rain_value, "
         "pm25 = excluded.pm25, "
@@ -389,6 +410,11 @@ void SQLiteCache::upsertDeviceState(const DeviceState &state)
     cacheQuery.addBindValue(state.humidity);
     cacheQuery.addBindValue(state.pressure);
     cacheQuery.addBindValue(state.visibility);
+    cacheQuery.addBindValue(state.windCapability ? 1 : 0);
+    cacheQuery.addBindValue(state.airCapability ? 1 : 0);
+    cacheQuery.addBindValue(state.rainCapability ? 1 : 0);
+    cacheQuery.addBindValue(state.pressureCapability ? 1 : 0);
+    cacheQuery.addBindValue(state.visibilityCapability ? 1 : 0);
     cacheQuery.addBindValue(state.rainDetected ? 1 : 0);
     cacheQuery.addBindValue(state.rainValue);
     cacheQuery.addBindValue(state.pm25);
@@ -432,7 +458,8 @@ QVector<DeviceState> SQLiteCache::loadDeviceStates() const
         "SELECT device_id, display_name, protocol_profile, operator_name, ip, rssi, relay1, relay2, "
         "pad_left_state, pad_right_state, pad_ready, pad_occupied, pad_mode, online, state_text, tick, "
         "wind_speed, wind_direction, wind_speed_raw, wind_direction_raw, rain_adc_raw, wind_direction_text, rain_level_text, "
-        "temperature, humidity, pressure, visibility, rain_detected, rain_value, pm25, pm10, co2, tvoc, ch2o, timestamp, last_seen_ms, active_alarm_count "
+        "temperature, humidity, pressure, visibility, capability_wind, capability_air, capability_rain, capability_pressure, capability_visibility, "
+        "rain_detected, rain_value, pm25, pm10, co2, tvoc, ch2o, timestamp, last_seen_ms, active_alarm_count "
         "FROM devices_cache ORDER BY last_seen_ms DESC, device_id ASC"));
     if (!query.exec())
     {
@@ -469,16 +496,21 @@ QVector<DeviceState> SQLiteCache::loadDeviceStates() const
         state.humidity = query.value(24).toDouble();
         state.pressure = query.value(25).toDouble();
         state.visibility = query.value(26).toDouble();
-        state.rainDetected = query.value(27).toInt() != 0;
-        state.rainValue = query.value(28).toDouble();
-        state.pm25 = query.value(29).toDouble();
-        state.pm10 = query.value(30).toDouble();
-        state.co2 = query.value(31).toDouble();
-        state.tvoc = query.value(32).toDouble();
-        state.ch2o = query.value(33).toDouble();
-        state.timestamp = query.value(34).toString();
-        state.lastSeenMs = query.value(35).toLongLong();
-        state.activeAlarmCount = query.value(36).toInt();
+        state.windCapability = query.value(27).toInt() != 0;
+        state.airCapability = query.value(28).toInt() != 0;
+        state.rainCapability = query.value(29).toInt() != 0;
+        state.pressureCapability = query.value(30).toInt() != 0;
+        state.visibilityCapability = query.value(31).toInt() != 0;
+        state.rainDetected = query.value(32).toInt() != 0;
+        state.rainValue = query.value(33).toDouble();
+        state.pm25 = query.value(34).toDouble();
+        state.pm10 = query.value(35).toDouble();
+        state.co2 = query.value(36).toDouble();
+        state.tvoc = query.value(37).toDouble();
+        state.ch2o = query.value(38).toDouble();
+        state.timestamp = query.value(39).toString();
+        state.lastSeenMs = query.value(40).toLongLong();
+        state.activeAlarmCount = query.value(41).toInt();
         states.push_back(state);
     }
 

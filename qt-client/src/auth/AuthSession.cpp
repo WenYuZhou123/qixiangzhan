@@ -17,7 +17,7 @@ namespace
 #ifdef QXZ_CLIENT_DEFAULT_API_BASE
 constexpr auto kDefaultApiBase = QXZ_CLIENT_DEFAULT_API_BASE;
 #else
-constexpr auto kDefaultApiBase = "https://api.qixiangzhan.online/api/v1";
+constexpr auto kDefaultApiBase = "https://qixiangzhan.online/api/v1";
 #endif
 constexpr auto kLocalAdminUser = "admin";
 constexpr auto kLocalAdminPass = "admin123";

@@ -75,6 +75,8 @@ static void AirSensor_DecodeFrame(const uint8_t *buf)
     g_air_sensor.pm10_ugm3     = (float)pm10_raw;
     g_air_sensor.tvoc_mg_m3    = (float)tvoc_raw / 1000.0f;
     g_air_sensor.ch2o_mg_m3    = (float)ech2o_raw / 1000.0f;
+    g_air_sensor.base.last_update_tick = HAL_GetTick();
+    g_air_sensor.base.online = 1U;
 
     g_weather_data.temperature_c = g_air_sensor.temperature_c;
     g_weather_data.humidity_rh   = g_air_sensor.humidity_rh;

@@ -71,6 +71,16 @@ def ensure_runtime_schema() -> None:
         statements.append("ALTER TABLE devices ADD COLUMN weather_pressure FLOAT NOT NULL DEFAULT 0")
     if "weather_visibility" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_visibility FLOAT NOT NULL DEFAULT 0")
+    if "weather_capability_wind" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_capability_wind BOOLEAN NOT NULL DEFAULT 1")
+    if "weather_capability_air" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_capability_air BOOLEAN NOT NULL DEFAULT 1")
+    if "weather_capability_rain" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_capability_rain BOOLEAN NOT NULL DEFAULT 1")
+    if "weather_capability_pressure" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_capability_pressure BOOLEAN NOT NULL DEFAULT 0")
+    if "weather_capability_visibility" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_capability_visibility BOOLEAN NOT NULL DEFAULT 0")
     if "weather_rain_detected" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_rain_detected BOOLEAN NOT NULL DEFAULT 0")
     if "weather_rain_value" not in device_columns:
@@ -85,6 +95,8 @@ def ensure_runtime_schema() -> None:
         statements.append("ALTER TABLE devices ADD COLUMN weather_tvoc FLOAT NOT NULL DEFAULT 0")
     if "weather_ch2o" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_ch2o FLOAT NOT NULL DEFAULT 0")
+    if "weather_sensor_status" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_sensor_status JSON NULL")
 
     with engine.begin() as conn:
         for statement in statements:

@@ -8,6 +8,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/opt/qixiangzhan/backend
 EnvironmentFile=/opt/qixiangzhan/backend/.env
+ExecStartPre=/opt/qixiangzhan/backend/.venv/bin/python -m alembic -c alembic.ini upgrade head
 ExecStart=/opt/qixiangzhan/backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5

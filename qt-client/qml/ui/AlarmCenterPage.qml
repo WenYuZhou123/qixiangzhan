@@ -5,97 +5,142 @@ import QtQuick.Layouts
 Pane {
     id: root
     property var controller
+    property string stateFilter: "active"
+    property string severityFilter: "all"
     readonly property bool mobile: controller && controller.androidMode
+
+    TaskTheme { id: theme }
+
+    function matchesFilter(active, severity) {
+        if (stateFilter === "active" && !active)
+            return false
+        if (stateFilter === "resolved" && active)
+            return false
+        if (severityFilter !== "all" && severity !== severityFilter)
+            return false
+        return true
+    }
 
     padding: 0
     background: Rectangle {
-        radius: mobile ? 28 : 30
-        color: "#ffffff"
-        border.color: "#d2dde3"
+        radius: theme.radiusLarge
+        color: theme.surfacePrimary
+        border.color: theme.borderSoft
         border.width: 1
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: mobile ? 16 : 18
-        spacing: 14
+        anchors.margins: mobile ? 12 : 14
+        spacing: 12
 
         Rectangle {
             Layout.fillWidth: true
-            radius: 26
-            implicitHeight: mobile ? 168 : 144
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: "#2a1820" }
-                GradientStop { position: 0.55; color: "#4a2834" }
-                GradientStop { position: 1.0; color: "#7b4852" }
-            }
-            border.color: "#b98b92"
+            implicitHeight: mobile ? 130 : 116
+            radius: theme.radiusLarge
+            color: theme.navSurface
+            border.color: "#2f3d4c"
             border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: mobile ? 18 : 20
-                spacing: 10
+                anchors.margins: 14
+                spacing: 8
 
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 10
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 3
+                        spacing: 2
 
                         Label {
+                            Layout.fillWidth: true
                             text: "告警中心"
-                            color: "#faf0f1"
-                            font.pixelSize: mobile ? 26 : 30
+                            color: theme.textPrimary
+                            font.pixelSize: mobile ? 24 : 26
                             font.bold: true
+                            elide: Text.ElideRight
                         }
 
                         Label {
+                            Layout.fillWidth: true
                             text: controller.alarmRepository.currentDeviceId.length > 0
-                                  ? "当前设备: " + controller.alarmRepository.currentDeviceId
+                                  ? "当前设备 " + controller.alarmRepository.currentDeviceId
                                   : "显示全部设备告警"
-                            color: "#f0d7db"
-                            font.pixelSize: mobile ? 15 : 13
+                            color: "#b9c7d1"
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
                         }
                     }
 
-                    Button {
+                    OpsButton {
                         text: "刷新"
-                        font.pixelSize: mobile ? 17 : 14
+                        Layout.preferredWidth: 86
                         onClicked: root.controller.refreshAlarms()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: "#3a1c25"
-                            font: parent.font
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            radius: 22
-                            color: "#f3d8dc"
-                            border.color: "#f9eaec"
-                            border.width: 1
-                        }
                     }
                 }
 
-                Label {
-                    text: "设备离线、低 RSSI、命令超时与链路故障都会统一收口到这里。"
-                    color: "#f3e7e8"
-                    font.pixelSize: mobile ? 16 : 13
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    StatusPill {
+                        textLabel: "活动"
+                        fill: root.stateFilter === "active" ? theme.danger : theme.offline
+                        MouseArea { anchors.fill: parent; onClicked: root.stateFilter = "active" }
+                    }
+
+                    StatusPill {
+                        textLabel: "全部"
+                        fill: root.stateFilter === "all" ? theme.pending : theme.offline
+                        MouseArea { anchors.fill: parent; onClicked: root.stateFilter = "all" }
+                    }
+
+                    StatusPill {
+                        textLabel: "已恢复"
+                        fill: root.stateFilter === "resolved" ? theme.success : theme.offline
+                        MouseArea { anchors.fill: parent; onClicked: root.stateFilter = "resolved" }
+                    }
+
+                    Item { Layout.fillWidth: true }
                 }
             }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            StatusPill {
+                textLabel: "全部级别"
+                fill: root.severityFilter === "all" ? theme.pending : theme.offline
+                MouseArea { anchors.fill: parent; onClicked: root.severityFilter = "all" }
+            }
+
+            StatusPill {
+                textLabel: "critical"
+                fill: root.severityFilter === "critical" ? theme.danger : theme.offline
+                MouseArea { anchors.fill: parent; onClicked: root.severityFilter = "critical" }
+            }
+
+            StatusPill {
+                textLabel: "warning"
+                fill: root.severityFilter === "warning" ? theme.warning : theme.offline
+                MouseArea { anchors.fill: parent; onClicked: root.severityFilter = "warning" }
+            }
+
+            Item { Layout.fillWidth: true }
         }
 
         ListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            spacing: 10
+            spacing: 8
             model: root.controller.alarmRepository
+            ScrollBar.vertical: ScrollBar {}
 
             delegate: Rectangle {
                 required property string deviceId
@@ -107,72 +152,74 @@ Pane {
                 required property string createdAt
                 required property string resolvedAt
 
-                width: ListView.view.width
-                radius: 22
-                color: active ? "#f8e5e7" : "#f0f4f6"
-                border.color: active ? "#c05c6b" : "#c5d0d6"
-                border.width: 1
-                implicitHeight: alarmColumn.implicitHeight + 26
+                readonly property bool match: root.matchesFilter(active, severity)
 
-                Column {
+                width: ListView.view.width
+                visible: match
+                height: match ? implicitHeight : 0
+                radius: theme.radiusMedium
+                color: active ? "#fff3f4" : theme.surfaceSecondary
+                border.color: active ? "#e2a2aa" : theme.borderSoft
+                border.width: 1
+                implicitHeight: alarmColumn.implicitHeight + 24
+
+                ColumnLayout {
                     id: alarmColumn
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: 14
+                    anchors.top: parent.top
+                    anchors.margins: 12
                     spacing: 8
 
-                    Row {
-                        spacing: 10
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
 
-                        Rectangle {
-                            radius: 12
-                            color: active ? "#e5b5bc" : "#d9e3e7"
-                            implicitHeight: 24
-                            implicitWidth: active ? 84 : 98
+                        StatusPill {
+                            textLabel: active ? "ACTIVE" : "RESOLVED"
+                            fill: active ? theme.danger : theme.success
+                        }
 
-                            Label {
-                                anchors.centerIn: parent
-                                text: active ? "ACTIVE" : "RESOLVED"
-                                color: active ? "#712331" : "#5c6d78"
-                                font.pixelSize: 11
-                                font.bold: true
-                            }
+                        StatusPill {
+                            textLabel: severity.length > 0 ? severity : "unknown"
+                            fill: theme.statusColor(severity)
                         }
 
                         Label {
-                            text: severity + " / " + source
-                            color: "#5e6f7b"
-                            font.pixelSize: mobile ? 15 : 12
+                            Layout.fillWidth: true
+                            text: source
+                            color: theme.textMuted
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
                         }
                     }
 
                     Label {
-                        text: deviceId + "  " + code
-                        color: "#162d3e"
-                        font.pixelSize: mobile ? 20 : 17
+                        Layout.fillWidth: true
+                        text: deviceId + " / " + code
+                        color: theme.textBody
+                        font.pixelSize: mobile ? 18 : 16
                         font.bold: true
+                        elide: Text.ElideRight
                     }
 
                     Label {
+                        Layout.fillWidth: true
                         text: message
                         wrapMode: Text.Wrap
-                        color: "#324753"
-                        font.pixelSize: mobile ? 16 : 14
+                        color: theme.textBody
+                        font.pixelSize: mobile ? 15 : 13
                     }
 
                     Label {
-                        text: active
-                              ? "创建时间: " + createdAt
-                              : "创建: " + createdAt + "   解除: " + resolvedAt
+                        Layout.fillWidth: true
+                        text: active ? "创建 " + createdAt : "创建 " + createdAt + " / 恢复 " + resolvedAt
                         wrapMode: Text.WrapAnywhere
-                        color: "#667985"
-                        font.pixelSize: mobile ? 15 : 13
+                        color: theme.textMuted
+                        font.pixelSize: 12
                     }
                 }
             }
-
-            ScrollBar.vertical: ScrollBar {}
         }
     }
 }

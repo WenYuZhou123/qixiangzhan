@@ -45,7 +45,7 @@
 #define MQTT_PASSWORD_BUF_SIZE   64
 #define MQTT_TOPIC_BUF_SIZE      128
 #define MQTT_PAYLOAD_BUF_SIZE    384
-#define MQTT_JSON_BUF_SIZE       1024
+#define MQTT_JSON_BUF_SIZE       2048
 #define MQTT_TX_CMD_BUF_SIZE     1024
 
 typedef enum

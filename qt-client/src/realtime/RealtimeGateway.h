@@ -3,6 +3,7 @@
 #include <QAbstractItemModel>
 #include <QHash>
 #include <QObject>
+#include <QJsonObject>
 #include <QStringListModel>
 #include <QTimer>
 #include <QtMqtt/QMqttClient>
@@ -102,6 +103,13 @@ private:
     void handleStateRules(const DeviceState &state);
     QString extractDeviceId(const QString &topicName) const;
     void rememberLegacyTopic(const QString &deviceId, const QString &topicName);
+    void rememberPendingCommandState(const QString &deviceId,
+                                    const QString &msgId,
+                                    const QString &command,
+                                    int value,
+                                    bool hasValue);
+    void clearPendingCommandState();
+    bool tryResolvePendingCommandFromStatus(const QJsonObject &statusObject);
 
     QMqttClient m_client;
     QStringListModel m_logModel;
@@ -125,4 +133,11 @@ private:
     int m_lowRssiThreshold = 10;
     qint64 m_offlineThresholdMs = 60000;
     bool m_ignoreCommandTimeouts = false;
+    QString m_pendingCommandDeviceId;
+    QString m_pendingCommandMsgId;
+    QString m_pendingCommandName;
+    int m_pendingCommandValue = 0;
+    bool m_pendingCommandHasValue = false;
+    qint64 m_pendingCommandStartedMs = 0;
+    qint64 m_pendingBaselineTick = 0;
 };

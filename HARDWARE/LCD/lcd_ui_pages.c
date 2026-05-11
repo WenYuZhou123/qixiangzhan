@@ -89,7 +89,7 @@ static void draw_button(const LCD_ControlButtonDef_t *button, uint8_t enabled)
 
 static void render_overview(const LCD_UI_Model_t *model)
 {
-    char line[96];
+    char line[128];
     const App_DeviceStatus_t *s = &model->status;
 
     draw_header("MISSION OVERVIEW", LCD_PAGE_OVERVIEW);
@@ -97,8 +97,8 @@ static void render_overview(const LCD_UI_Model_t *model)
     snprintf(line, sizeof(line), "%s  %s", s->device_id, s->online ? "ONLINE" : "OFFLINE");
     draw_card(16U, 76U, 250U, 100U, "DEVICE", line, s->online ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_DANGER);
 
-    snprintf(line, sizeof(line), "MQTT %u  RSSI %d", (unsigned)s->online, s->net.rssi);
-    draw_card(276U, 76U, 250U, 100U, "NETWORK", line, LCD_PORT_COLOR_ACCENT);
+    snprintf(line, sizeof(line), "MQTT %s  RSSI %d", s->online ? "LIVE" : "WAIT", s->net.rssi);
+    draw_card(276U, 76U, 250U, 100U, "LINK", line, LCD_PORT_COLOR_ACCENT);
 
     snprintf(line, sizeof(line), "%s / %s", s->pad.left_state, s->pad.right_state);
     draw_card(536U, 76U, 248U, 100U, "PAD", line, LCD_PORT_COLOR_WARN);
@@ -112,19 +112,19 @@ static void render_overview(const LCD_UI_Model_t *model)
              (double)s->weather.wind_direction);
     draw_card(212U, 190U, 188U, 100U, "WIND", line, LCD_PORT_COLOR_ACCENT);
 
-    snprintf(line, sizeof(line), "R1 %u  R2 %u", (unsigned)s->relay1, (unsigned)s->relay2);
-    draw_card(408U, 190U, 188U, 100U, "RELAY", line, LCD_PORT_COLOR_SUCCESS);
+    snprintf(line, sizeof(line), "R1 %s  R2 %s", s->relay1 ? "ON" : "OFF", s->relay2 ? "ON" : "OFF");
+    draw_card(408U, 190U, 188U, 100U, "CONTROL", line, LCD_PORT_COLOR_SUCCESS);
 
-    snprintf(line, sizeof(line), "RAIN %.0f%%", (double)s->weather.rain_value);
+    snprintf(line, sizeof(line), "%s  %.0f%%", s->weather.rain_detected ? "WET" : "DRY", (double)s->weather.rain_value);
     draw_card(604U, 190U, 180U, 100U, "RAIN", line, LCD_PORT_COLOR_ACCENT);
 
     LCD_Port_FillRect(0U, 316U, LCD_UI_SCREEN_WIDTH, 28U, LCD_PORT_COLOR_BG);
-    LCD_Port_DrawText(18U, 320U, "Top tabs: pages  Swipe: next / previous", LCD_PORT_COLOR_MUTED, 0U);
+    LCD_Port_DrawText(18U, 320U, "Measured weather only  Swipe left or right for more", LCD_PORT_COLOR_MUTED, 0U);
 }
 
 static void render_control(const LCD_UI_Model_t *model)
 {
-    char line[96];
+    char line[128];
     const App_DeviceStatus_t *s = &model->status;
     uint8_t index;
     uint8_t buttons_enabled = (uint8_t)((model->control_busy == 0U) ? 1U : 0U);
@@ -146,10 +146,12 @@ static void render_control(const LCD_UI_Model_t *model)
              s->pad.mode,
              (unsigned)s->pad.ready,
              (unsigned)s->pad.occupied);
-    draw_card(16U, 174U, 376U, 90U, "MISSION", line, s->pad.ready ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_WARN);
+    draw_card(16U, 174U, 376U, 90U, "PAD STATE", line, s->pad.ready ? LCD_PORT_COLOR_SUCCESS : LCD_PORT_COLOR_WARN);
 
-    snprintf(line, sizeof(line), "ACK %s",
-             s->last_status_publish_ok != 0U ? "OK" : "WAIT");
+    snprintf(line, sizeof(line), "ACK %s  WIND %.1f m/s  RAIN %s",
+             s->last_status_publish_ok != 0U ? "OK" : "WAIT",
+             (double)s->weather.wind_speed,
+             s->weather.rain_detected ? "YES" : "NO");
     draw_card(408U, 174U, 376U, 90U, "STATE", line, LCD_PORT_COLOR_ACCENT);
 
     for (index = 0U; index < (uint8_t)(sizeof(g_control_buttons) / sizeof(g_control_buttons[0])); index++)
@@ -164,14 +166,14 @@ static void render_control(const LCD_UI_Model_t *model)
     LCD_Port_FillRect(0U, 418U, LCD_UI_SCREEN_WIDTH, 28U, LCD_PORT_COLOR_BG);
     LCD_Port_DrawText(18U,
                       422U,
-                      model->control_message[0] != '\0' ? model->control_message : "Tap buttons to control relays.",
+                      model->control_message[0] != '\0' ? model->control_message : "Tap buttons to send relay or refresh commands.",
                       model->control_busy != 0U ? LCD_PORT_COLOR_WARN : LCD_PORT_COLOR_TEXT,
                       0U);
 }
 
 static void render_weather(const LCD_UI_Model_t *model)
 {
-    char line[96];
+    char line[128];
     const App_DeviceStatus_t *s = &model->status;
 
     draw_header("WEATHER", LCD_PAGE_WEATHER);
@@ -185,17 +187,16 @@ static void render_weather(const LCD_UI_Model_t *model)
     snprintf(line, sizeof(line), "%.0f %%", (double)s->weather.humidity);
     draw_card(604U, 76U, 180U, 92U, "HUMIDITY", line, LCD_PORT_COLOR_ACCENT);
 
-    snprintf(line, sizeof(line), "PM2.5 %.0f", (double)s->weather.pm25);
-    draw_card(16U, 184U, 188U, 92U, "PM2.5", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "PM10 %.0f", (double)s->weather.pm10);
-    draw_card(212U, 184U, 188U, 92U, "PM10", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "CO2 %.0f ppm", (double)s->weather.co2);
-    draw_card(408U, 184U, 188U, 92U, "CO2", line, LCD_PORT_COLOR_ACCENT);
-    snprintf(line, sizeof(line), "%.0f%%", (double)s->weather.rain_value);
-    draw_card(604U, 184U, 180U, 92U, "RAIN", line, LCD_PORT_COLOR_ACCENT);
+    snprintf(line, sizeof(line), "PM2.5 %.0f  PM10 %.0f", (double)s->weather.pm25, (double)s->weather.pm10);
+    draw_card(16U, 184U, 384U, 92U, "PARTICLES", line, LCD_PORT_COLOR_ACCENT);
+    snprintf(line, sizeof(line), "CO2 %.0f  TVOC %.3f", (double)s->weather.co2, (double)s->weather.tvoc);
+    draw_card(408U, 184U, 376U, 92U, "AIR", line, LCD_PORT_COLOR_ACCENT);
 
-    snprintf(line, sizeof(line), "TVOC %.3f  CH2O %.3f", (double)s->weather.tvoc, (double)s->weather.ch2o);
-    draw_card(16U, 292U, 380U, 92U, "GAS", line, LCD_PORT_COLOR_ACCENT);
+    snprintf(line, sizeof(line), "%s  %.0f%%  CH2O %.3f",
+             s->weather.rain_detected ? "RAIN YES" : "RAIN NO",
+             (double)s->weather.rain_value,
+             (double)s->weather.ch2o);
+    draw_card(16U, 292U, 380U, 92U, "RAIN / GAS", line, LCD_PORT_COLOR_ACCENT);
     snprintf(line, sizeof(line), "WS %u  WD %u  R %u",
              (unsigned)s->weather.wind_speed_raw,
              (unsigned)s->weather.wind_direction_raw,
@@ -203,7 +204,10 @@ static void render_weather(const LCD_UI_Model_t *model)
     draw_card(408U, 292U, 376U, 92U, "RAW INPUT", line, LCD_PORT_COLOR_WARN);
 
     LCD_Port_FillRect(0U, 396U, LCD_UI_SCREEN_WIDTH, 28U, LCD_PORT_COLOR_BG);
-    snprintf(line, sizeof(line), "RAIN %.3fV  TXT %s", (double)s->weather.rain_voltage, s->weather.rain_level_text);
+    snprintf(line, sizeof(line), "DIR %s  RAIN %.3fV  TXT %s",
+             s->weather.wind_direction_text,
+             (double)s->weather.rain_voltage,
+             s->weather.rain_level_text);
     LCD_Port_DrawText(18U, 400U, line, LCD_PORT_COLOR_SUCCESS, 0U);
 }
 
@@ -247,6 +251,14 @@ static void render_debug(const LCD_UI_Model_t *model)
              (unsigned long)s->weather.wind_query_rx_count,
              (unsigned long)s->weather.wind_query_error_count);
     LCD_Port_DrawText(18U, 370U, footer, LCD_PORT_COLOR_DANGER, 0U);
+
+    snprintf(footer, sizeof(footer), "SENS %u/%u/%u FAIL %u LAST %lu",
+             (unsigned)s->weather.wind_online,
+             (unsigned)s->weather.air_online,
+             (unsigned)s->weather.rain_online,
+             (unsigned)s->weather.sensor_failure_count,
+             (unsigned long)s->weather.sensor_last_ok_tick);
+    LCD_Port_DrawText(18U, 392U, footer, LCD_PORT_COLOR_SUCCESS, 0U);
 }
 
 void LCD_UI_RenderPage(LCD_Page_t page, const LCD_UI_Model_t *model)

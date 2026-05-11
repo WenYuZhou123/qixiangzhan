@@ -1,11 +1,15 @@
 import asyncio
+import os
+import shutil
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .auth import (
     authenticate,
     build_access_token,
@@ -23,40 +27,56 @@ from .database import SessionLocal, get_db
 from .models import Alarm, CommandMessage, Device, DeviceMembership, TelemetryMessage, User
 from .mqtt_bridge import EmqxBridge
 from .realtime import realtime_hub
-from .schema_migrations import ensure_runtime_schema
 from .schemas import (
     AlarmResponse,
     CommandCreateRequest,
     CommandCreateResponse,
     CommandResponse,
     DeviceMembershipRequest,
+    DeviceDiagnosticsResponse,
     DeviceResponse,
     HistoryResponse,
     LoginRequest,
     LogoutRequest,
     MeResponse,
+    ProjectTelemetryResponse,
     RefreshRequest,
     SessionResponse,
+    SystemHealthResponse,
+    WeatherObservationResponse,
     UserCreateRequest,
     UserResponse,
     UserUpdateRequest,
+)
+from .project_storage import (
+    ProjectSessionLocal,
+    ProjectTelemetry,
+    ensure_project_schema,
+    load_latest_project_by_device_ids,
+    load_latest_project_rows,
+    project_database_label,
 )
 from .services import (
     allowed_device_ids_for_user,
     apply_runtime_rules,
     create_command_request,
+    create_system_event,
     device_alarm_count_subquery,
     device_ids_for_user,
     replace_user_memberships,
+    prune_runtime_history,
     retry_pending_command_requests,
     serialize_device,
     serialize_user,
+    sensor_status_from_payload,
     user_can_access_device,
     write_audit_log,
 )
+from .models import DeviceLastState, WeatherObservation
 
 logger = logging.getLogger(__name__)
 bridge = EmqxBridge()
+APP_STARTED_AT = utcnow()
 
 
 def request_meta(request: Request) -> tuple[str, str]:
@@ -74,6 +94,45 @@ def ensure_device_access(db: Session, user: User, device_id: str) -> None:
     if user_can_access_device(db, user, device_id):
         return
     raise HTTPException(status_code=403, detail="Device access denied")
+
+
+def latest_project_map_for_devices(device_ids: list[str]) -> dict[str, ProjectTelemetry]:
+    if not device_ids:
+        return {}
+    try:
+        with ProjectSessionLocal() as project_db:
+            return load_latest_project_by_device_ids(project_db, device_ids)
+    except Exception as exc:  # pragma: no cover - optional external database
+        logger.warning("Project database read failed: %s", exc)
+        return {}
+
+
+def project_rows_for_user(
+    *,
+    db: Session,
+    user: User,
+    device_id: str | None = None,
+    limit: int = 200,
+) -> list[ProjectTelemetry]:
+    allowed_ids: list[str] | None = None
+    if device_id:
+        ensure_device_access(db, user, device_id)
+    elif user.role != "admin":
+        allowed_ids = sorted(allowed_device_ids_for_user(db, user))
+        if not allowed_ids:
+            return []
+
+    try:
+        with ProjectSessionLocal() as project_db:
+            return load_latest_project_rows(
+                project_db,
+                device_id=device_id,
+                device_ids=allowed_ids,
+                limit=limit,
+            )
+    except Exception as exc:  # pragma: no cover - optional external database
+        logger.warning("Project database read failed: %s", exc)
+        return []
 
 
 @asynccontextmanager
@@ -98,12 +157,52 @@ async def lifespan(app: FastAPI):
             except asyncio.TimeoutError:
                 continue
 
-    ensure_runtime_schema()
+    async def housekeeping_worker() -> None:
+        while not stop_event.is_set():
+            try:
+                with SessionLocal() as db:
+                    prune_runtime_history(db)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Runtime housekeeping failed: %s", exc)
+
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(),
+                    timeout=max(60, settings.retention_cleanup_interval_seconds),
+                )
+            except asyncio.TimeoutError:
+                continue
+
     with SessionLocal() as db:
         seed_admin_user(db)
+        create_system_event(
+            db,
+            event_type="service.start",
+            message="Backend service starting",
+            source="backend",
+            payload={"retention_days": settings.retention_days},
+            commit=True,
+        )
+        try:
+            ensure_project_schema()
+        except Exception as exc:  # pragma: no cover - optional external database
+            logger.warning("Project database unavailable: %s", exc)
+            create_system_event(
+                db,
+                event_type="project.storage_unavailable",
+                severity="warning",
+                source="project-db",
+                message="weather.project storage is unavailable; main backend startup continues",
+                payload={
+                    "database_url": project_database_label(),
+                    "error": str(exc),
+                },
+                commit=True,
+            )
 
     realtime_hub.attach_loop(asyncio.get_running_loop())
     retry_task = asyncio.create_task(command_retry_worker())
+    housekeeping_task = asyncio.create_task(housekeeping_worker())
 
     try:
         bridge.start()
@@ -114,15 +213,27 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_event.set()
-        retry_task.cancel()
-        try:
-            await retry_task
-        except asyncio.CancelledError:
-            pass
+        for task in (retry_task, housekeeping_task):
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         try:
             bridge.stop()
         except Exception as exc:  # pragma: no cover
             logger.warning("MQTT bridge stop failed: %s", exc)
+        try:
+            with SessionLocal() as db:
+                create_system_event(
+                    db,
+                    event_type="service.stop",
+                    message="Backend service stopped",
+                    source="backend",
+                    commit=True,
+                )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to record stop event: %s", exc)
 
 
 app = FastAPI(title="qixiangzhan backend", version="0.2.0", lifespan=lifespan)
@@ -136,6 +247,64 @@ def healthz(db: Session = Depends(get_db)) -> dict[str, object]:
         "time": utcnow().isoformat(),
         "mqtt_bridge_connected": bridge.connected,
     }
+
+
+@app.get("/api/v1/system/health", response_model=SystemHealthResponse)
+def system_health(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SystemHealthResponse:
+    _ = current_user
+    db.execute(text("SELECT 1"))
+
+    device_count = db.scalar(select(func.count(Device.id))) or 0
+    online_count = db.scalar(select(func.count(Device.id)).where(Device.online.is_(True))) or 0
+    latest_seen = db.scalar(select(func.max(Device.last_seen_at)))
+    latest_obs = db.scalar(select(func.max(WeatherObservation.observed_at)))
+    uptime_seconds = max(0.0, (utcnow() - APP_STARTED_AT).total_seconds())
+    disk_usage = shutil.disk_usage(os.getcwd())
+    disk_free_percent = (disk_usage.free / disk_usage.total * 100.0) if disk_usage.total else 0.0
+
+    status = "ok"
+    if not bridge.connected:
+        status = "degraded"
+    if disk_free_percent < 10.0:
+        status = "warning"
+
+    return SystemHealthResponse(
+        status=status,
+        time=utcnow(),
+        uptime_seconds=uptime_seconds,
+        api={
+            "host": settings.api_host,
+            "port": settings.api_port,
+            "version": app.version,
+            "connected_devices": int(online_count),
+            "total_devices": int(device_count),
+        },
+        mysql={
+            "database_url": settings.database_url.rsplit("@", 1)[-1] if "@" in settings.database_url else settings.database_url,
+            "ok": True,
+        },
+        mqtt={
+            "connected": bridge.connected,
+            "host": settings.mqtt_host,
+            "port": settings.mqtt_port,
+        },
+        disk={
+            "total": disk_usage.total,
+            "used": disk_usage.used,
+            "free": disk_usage.free,
+            "free_percent": round(disk_free_percent, 2),
+        },
+        devices={
+            "last_seen_at": latest_seen,
+            "last_weather_at": latest_obs,
+            "online": int(online_count),
+            "total": int(device_count),
+        },
+        retention={
+            "days": settings.retention_days,
+            "cleanup_interval_seconds": settings.retention_cleanup_interval_seconds,
+        },
+    )
 
 
 @app.post("/api/v1/auth/login", response_model=SessionResponse)
@@ -229,7 +398,14 @@ def list_devices(current_user: User = Depends(get_current_user), db: Session = D
         )
 
     rows = db.execute(stmt).all()
-    return [DeviceResponse.model_validate(serialize_device(row[0], int(row[1]))) for row in rows]
+    device_ids = [row[0].device_id for row in rows]
+    latest_project = latest_project_map_for_devices(device_ids)
+    return [
+        DeviceResponse.model_validate(
+            serialize_device(row[0], int(row[1]), project=latest_project.get(row[0].device_id))
+        )
+        for row in rows
+    ]
 
 
 @app.get("/api/v1/devices/{device_id}", response_model=DeviceResponse)
@@ -242,7 +418,10 @@ def get_device(device_id: str, current_user: User = Depends(get_current_user), d
     device = db.scalar(select(Device).where(Device.device_id == device_id))
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
-    return DeviceResponse.model_validate(serialize_device(device, int(alarm_count)))
+    latest_project = latest_project_map_for_devices([device.device_id])
+    return DeviceResponse.model_validate(
+        serialize_device(device, int(alarm_count), project=latest_project.get(device.device_id))
+    )
 
 
 @app.get("/api/v1/devices/{device_id}/history", response_model=list[HistoryResponse])
@@ -263,6 +442,50 @@ def get_device_history(
     return [HistoryResponse.model_validate(row) for row in rows]
 
 
+@app.get("/api/v1/devices/{device_id}/weather/history", response_model=list[WeatherObservationResponse])
+def get_device_weather_history(
+    device_id: str,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    limit: int = 500,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[WeatherObservationResponse]:
+    apply_runtime_rules(db)
+    ensure_device_access(db, current_user, device_id)
+    stmt = select(WeatherObservation).where(WeatherObservation.device_id == device_id)
+    if start is not None:
+        stmt = stmt.where(WeatherObservation.observed_at >= start)
+    if end is not None:
+        stmt = stmt.where(WeatherObservation.observed_at <= end)
+    rows = db.scalars(stmt.order_by(WeatherObservation.observed_at.desc()).limit(limit)).all()
+    return [WeatherObservationResponse.model_validate(row) for row in rows]
+
+
+@app.get("/api/v1/project/latest", response_model=list[ProjectTelemetryResponse])
+def list_latest_project_telemetry(
+    device_id: str | None = None,
+    limit: int = 200,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ProjectTelemetryResponse]:
+    limit = max(1, min(limit, 1000))
+    rows = project_rows_for_user(db=db, user=current_user, device_id=device_id, limit=limit)
+    return [ProjectTelemetryResponse.model_validate(row) for row in rows]
+
+
+@app.get("/api/v1/project/{device_id}/history", response_model=list[ProjectTelemetryResponse])
+def get_project_device_history(
+    device_id: str,
+    limit: int = 500,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ProjectTelemetryResponse]:
+    limit = max(1, min(limit, 2000))
+    rows = project_rows_for_user(db=db, user=current_user, device_id=device_id, limit=limit)
+    return [ProjectTelemetryResponse.model_validate(row) for row in rows]
+
+
 @app.get("/api/v1/devices/{device_id}/alarms", response_model=list[AlarmResponse])
 def get_device_alarms(
     device_id: str,
@@ -275,6 +498,45 @@ def get_device_alarms(
         select(Alarm).where(Alarm.device_id == device_id).order_by(Alarm.active.desc(), Alarm.created_at.desc())
     ).all()
     return [AlarmResponse.model_validate(row) for row in rows]
+
+
+@app.get("/api/v1/devices/{device_id}/diagnostics", response_model=DeviceDiagnosticsResponse)
+def get_device_diagnostics(
+    device_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DeviceDiagnosticsResponse:
+    apply_runtime_rules(db)
+    ensure_device_access(db, current_user, device_id)
+    device = db.scalar(select(Device).where(Device.device_id == device_id))
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    last_state = db.scalar(select(DeviceLastState).where(DeviceLastState.device_id == device_id))
+    payload = last_state.payload if last_state is not None else {}
+    sensor_status = sensor_status_from_payload(device.weather_sensor_status or {})
+    if not device.weather_sensor_status:
+        sensor_status["wind_online"] = device.weather_capability_wind
+        sensor_status["air_online"] = device.weather_capability_air
+        sensor_status["rain_online"] = device.weather_capability_rain
+    l610 = {
+        "state": str(sensor_status.get("l610_state") or device.state_text or ""),
+        "rssi": device.rssi,
+        "operator": device.operator_name,
+        "ip": device.ip,
+        "last_status_ok": bool(device.online),
+        "last_publish_ok": bool(device.last_seen_at is not None),
+    }
+
+    return DeviceDiagnosticsResponse(
+        device_id=device.device_id,
+        online=device.online,
+        last_seen_at=device.last_seen_at,
+        updated_at=device.updated_at,
+        l610=l610,
+        sensor_status=sensor_status,
+        last_state=payload,
+    )
 
 
 @app.get("/api/v1/commands", response_model=list[CommandResponse])

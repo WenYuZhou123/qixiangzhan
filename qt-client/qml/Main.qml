@@ -5,18 +5,18 @@ import "ui"
 
 ApplicationWindow {
     id: window
-    width: 1520
-    height: 940
-    minimumWidth: 1180
-    minimumHeight: 760
+    width: 1440
+    height: 900
+    minimumWidth: androidMode ? 360 : 1024
+    minimumHeight: androidMode ? 640 : 700
     visible: true
-    title: "气象站任务终端"
+    title: "气象站边缘主站"
     font.family: Qt.platform.os === "android" ? "Noto Sans CJK SC" : "Microsoft YaHei UI"
 
     TaskTheme { id: theme }
 
     readonly property bool androidMode: Qt.platform.os === "android"
-    readonly property bool compactDesktop: !androidMode && width < 1360
+    readonly property bool compactDesktop: !androidMode && width < 1280
 
     property string currentPage: "overview"
     property var navItems: [
@@ -36,41 +36,31 @@ ApplicationWindow {
         { key: "overview", label: "概览", badge: "OV" },
         { key: "pad", label: "控制", badge: "CT" },
         { key: "weather", label: "气象", badge: "WX" },
-        { key: "settings", label: "设置", badge: "CF" }
+        { key: "alarms", label: "告警", badge: "AL" },
+        { key: "more", label: "更多", badge: "MO" }
     ]
     property var mobileNavItemsLoggedOut: [
         { key: "login", label: "登录", badge: "AU" },
         { key: "overview", label: "概览", badge: "OV" },
         { key: "weather", label: "气象", badge: "WX" },
-        { key: "settings", label: "设置", badge: "CF" }
+        { key: "settings", label: "设置", badge: "CF" },
+        { key: "more", label: "更多", badge: "MO" }
     ]
 
     function pageIndex() {
         switch (currentPage) {
-        case "overview":
-            return 0
-        case "pad":
-            return 1
-        case "weather":
-            return 2
-        case "history":
-            return 3
-        case "alarms":
-            return 4
-        case "settings":
-            return 5
-        case "users":
-            return 6
-        case "engineering":
-            return 7
-        case "serial":
-            return 8
-        case "logs":
-            return 9
-        case "login":
-            return 10
-        default:
-            return 0
+        case "overview": return 0
+        case "pad": return 1
+        case "weather": return 2
+        case "history": return 3
+        case "alarms": return 4
+        case "settings": return 5
+        case "users": return 6
+        case "engineering": return 7
+        case "serial": return 8
+        case "logs": return 9
+        case "login": return 10
+        default: return 0
         }
     }
 
@@ -89,11 +79,10 @@ ApplicationWindow {
     function authChipText() {
         if (appController.authSession.guestMode)
             return "游客预览"
-        if (appController.authSession.authenticated) {
-            if (appController.authSession.displayName.length > 0)
-                return appController.authSession.displayName
-            return appController.authSession.username
-        }
+        if (appController.authSession.authenticated)
+            return appController.authSession.displayName.length > 0
+                    ? appController.authSession.displayName
+                    : appController.authSession.username
         return "未登录"
     }
 
@@ -111,7 +100,7 @@ ApplicationWindow {
         if (!androidMode)
             return
 
-        const desktopOnlyPages = ["history", "alarms", "users", "engineering", "serial", "logs"]
+        const desktopOnlyPages = ["users", "engineering", "serial", "logs"]
         if (desktopOnlyPages.indexOf(currentPage) >= 0)
             currentPage = "overview"
     }
@@ -124,11 +113,8 @@ ApplicationWindow {
     }
 
     onActiveChanged: {
-        if (!active)
-            return
-        if (!appController.authSession.authenticated)
-            return
-        appController.remoteSyncService.refreshVisibleData()
+        if (active && appController.authSession.authenticated)
+            appController.remoteSyncService.refreshVisibleData()
     }
 
     onCurrentPageChanged: {
@@ -147,224 +133,183 @@ ApplicationWindow {
         function onSessionChanged() {
             if (!androidMode)
                 return
-
             if (!appController.authSession.authenticated) {
                 if (currentPage !== "login" && currentPage !== "settings")
                     currentPage = "login"
                 return
             }
-
             if (currentPage === "login")
                 currentPage = "overview"
         }
     }
 
-    background: Item {
-        Rectangle {
-            anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: theme.shellTop }
-                GradientStop { position: 0.35; color: theme.shellMid }
-                GradientStop { position: 1.0; color: theme.shellBottom }
-            }
-        }
-
-        Rectangle {
-            width: parent.width * 0.34
-            height: parent.height * 0.2
-            x: parent.width * 0.46
-            y: -height * 0.25
-            radius: width / 2
-            color: "#24d6e5ed"
-        }
-
-        Rectangle {
-            width: parent.width * 0.46
-            height: parent.height * 0.24
-            x: -width * 0.16
-            y: parent.height * 0.74
-            radius: height / 2
-            rotation: -4
-            color: "#20d5c8b2"
-        }
+    background: Rectangle {
+        color: androidMode ? theme.pageSurface : theme.shellTop
     }
 
     header: Rectangle {
-        implicitHeight: androidMode ? 110 : 126
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: theme.shellTop }
-            GradientStop { position: 0.6; color: theme.shellMid }
-            GradientStop { position: 1.0; color: "#214055" }
-        }
-        border.color: theme.borderStrong
+        implicitHeight: androidMode ? 82 : 72
+        color: theme.navSurface
+        border.color: "#253241"
         border.width: 1
 
-        ColumnLayout {
+        RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: androidMode ? 14 : 24
-            anchors.rightMargin: androidMode ? 14 : 24
-            anchors.topMargin: androidMode ? 10 : 16
-            anchors.bottomMargin: androidMode ? 10 : 14
-            spacing: androidMode ? 8 : 10
+            anchors.leftMargin: androidMode ? 12 : 18
+            anchors.rightMargin: androidMode ? 12 : 18
+            spacing: 10
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 2
 
-                ColumnLayout {
+                Label {
                     Layout.fillWidth: true
-                    spacing: 2
-
-                    Label {
-                        text: "气象站任务终端"
-                        color: theme.textPrimary
-                        font.pixelSize: androidMode ? 20 : 30
-                        font.bold: true
-                        elide: Text.ElideRight
-                    }
-
-                    Label {
-                        text: androidMode
-                              ? "统一概览、控制、气象与设置"
-                              : "航空控制台风格，统一桌面、安卓与本地屏交互语言"
-                        color: "#c7d6df"
-                        font.pixelSize: androidMode ? 11 : 14
-                        elide: Text.ElideRight
-                    }
+                    text: "气象站边缘主站"
+                    color: theme.textPrimary
+                    font.pixelSize: androidMode ? 20 : 24
+                    font.bold: true
+                    elide: Text.ElideRight
                 }
 
-                Rectangle {
-                    radius: androidMode ? 18 : 22
-                    Layout.preferredWidth: androidMode ? 122 : 228
-                    Layout.preferredHeight: theme.touchTarget
-                    color: appController.authSession.authenticated ? "#274e60" : "#314c5a"
-                    border.color: appController.authSession.authenticated ? theme.accentCyan : theme.borderStrong
-                    border.width: 1
-
-                    Label {
-                        anchors.centerIn: parent
-                        width: parent.width - 18
-                        text: window.authChipText()
-                        color: theme.textPrimary
-                        font.pixelSize: androidMode ? 13 : 15
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        elide: Text.ElideRight
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: window.currentPage = "login"
-                    }
-                }
-
-                Rectangle {
-                    radius: androidMode ? 18 : 22
-                    Layout.preferredWidth: androidMode ? 104 : 150
-                    Layout.preferredHeight: theme.touchTarget
-                    color: window.statusChipColor()
-                    border.color: appController.runtimeConnected ? "#a7c7bd" : "#d7b0b6"
-                    border.width: 1
-
-                    Label {
-                        anchors.centerIn: parent
-                        width: parent.width - 18
-                        text: window.statusChipText()
-                        color: "white"
-                        font.pixelSize: androidMode ? 13 : 15
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        elide: Text.ElideRight
-                    }
+                Label {
+                    Layout.fillWidth: true
+                    text: appController.deviceRepository.currentDeviceId.length > 0
+                          ? "当前设备 " + appController.deviceRepository.currentDeviceId
+                          : "等待设备上线并同步状态"
+                    color: "#b9c7d1"
+                    font.pixelSize: androidMode ? 12 : 13
+                    elide: Text.ElideRight
                 }
             }
 
-            Label {
-                Layout.fillWidth: true
-                text: appController.deviceRepository.currentDeviceId.length > 0
-                      ? "当前设备  " + appController.deviceRepository.currentDeviceId
-                      : "等待设备上线并同步状态"
-                color: "#d9e4eb"
-                font.pixelSize: androidMode ? 12 : 14
-                elide: Text.ElideRight
+            StatusPill {
+                textLabel: window.authChipText()
+                fill: appController.authSession.authenticated ? theme.pending : theme.offline
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: window.currentPage = "login"
+                }
+            }
+
+            StatusPill {
+                textLabel: window.statusChipText()
+                fill: window.statusChipColor()
             }
         }
     }
 
     footer: Item {
         visible: androidMode
-        implicitHeight: 94
+        implicitHeight: 86
 
         Rectangle {
             anchors.fill: parent
-            color: theme.shellTop
+            color: theme.navSurface
+            border.color: "#253241"
+            border.width: 1
         }
 
-        Rectangle {
+        RowLayout {
             anchors.fill: parent
-            anchors.margins: 10
-            radius: 26
-            color: "#e8112131"
-            border.color: "#37576b"
-            border.width: 1
+            anchors.margins: 8
+            spacing: 6
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 8
+            Repeater {
+                model: window.mobileNavigationModel()
 
-                Repeater {
-                    model: window.mobileNavigationModel()
+                delegate: Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    readonly property bool active: window.currentPage === modelData.key
+                                                   || (modelData.key === "more" && ["history", "settings"].indexOf(window.currentPage) >= 0)
 
-                    delegate: Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        readonly property bool active: window.currentPage === modelData.key
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: theme.radiusMedium
+                        color: active ? theme.glassStrong : "transparent"
+                        border.color: active ? theme.accentCyan : "#334251"
+                        border.width: 1
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 18
-                            color: active ? theme.glassStrong : "#10223342"
-                            border.color: active ? theme.accentCyan : "#3b5b6f"
-                            border.width: 1
-                            opacity: navTap.pressed ? 0.9 : 1.0
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 4
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 4
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: modelData.badge
+                                color: active ? theme.accentCyanDeep : "#d8e1e7"
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
 
-                                Rectangle {
-                                    width: 34
-                                    height: 34
-                                    radius: 17
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: active ? theme.accentCyanDeep : "#173243"
-
-                                    Label {
-                                        anchors.centerIn: parent
-                                        text: modelData.badge
-                                        color: "#eef5f8"
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        font.letterSpacing: 1
-                                    }
-                                }
-
-                                Label {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: modelData.label
-                                    color: active ? theme.textBody : "#e4edf2"
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                }
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: modelData.label
+                                color: active ? theme.textBody : "#d8e1e7"
+                                font.pixelSize: 12
+                                font.bold: true
                             }
                         }
+                    }
 
-                        MouseArea {
-                            id: navTap
-                            anchors.fill: parent
-                            onClicked: window.currentPage = modelData.key
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (modelData.key === "more")
+                                morePopup.open()
+                            else
+                                window.currentPage = modelData.key
                         }
+                    }
+                }
+            }
+        }
+
+        Popup {
+            id: morePopup
+            modal: true
+            focus: true
+            y: -contentItem.implicitHeight - 12
+            x: Math.max(12, parent.width - width - 12)
+            width: Math.min(260, parent.width - 24)
+            padding: 10
+
+            background: Rectangle {
+                radius: theme.radiusMedium
+                color: theme.surfacePrimary
+                border.color: theme.borderSoft
+                border.width: 1
+            }
+
+            ColumnLayout {
+                spacing: 8
+
+                OpsButton {
+                    Layout.fillWidth: true
+                    text: "命令历史"
+                    onClicked: {
+                        morePopup.close()
+                        window.currentPage = "history"
+                    }
+                }
+
+                OpsButton {
+                    Layout.fillWidth: true
+                    text: "平台设置"
+                    onClicked: {
+                        morePopup.close()
+                        window.currentPage = "settings"
+                    }
+                }
+
+                OpsButton {
+                    Layout.fillWidth: true
+                    text: appController.authSession.authenticated ? "账号" : "登录"
+                    onClicked: {
+                        morePopup.close()
+                        window.currentPage = "login"
                     }
                 }
             }
@@ -373,42 +318,29 @@ ApplicationWindow {
 
     RowLayout {
         anchors.fill: parent
-        anchors.margins: androidMode ? 0 : 18
-        spacing: androidMode ? 0 : 18
+        anchors.margins: androidMode ? 0 : 14
+        spacing: androidMode ? 0 : 14
 
-        Item {
+        Rectangle {
             visible: !androidMode
-            Layout.preferredWidth: compactDesktop ? 220 : 252
+            Layout.preferredWidth: compactDesktop ? 188 : 218
             Layout.fillHeight: true
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 32
-                color: "#d5122432"
-                border.color: "#4a687b"
-                border.width: 1
-            }
+            radius: theme.radiusLarge
+            color: theme.navSurface
+            border.color: "#253241"
+            border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                anchors.margins: 12
+                spacing: 8
 
-                ColumnLayout {
-                    spacing: 2
-
-                    Label {
-                        text: "任务导航"
-                        color: theme.textPrimary
-                        font.pixelSize: 24
-                        font.bold: true
-                    }
-
-                    Label {
-                        text: "核心界面统一，扩展页面保留"
-                        color: "#b7cad6"
-                        font.pixelSize: 12
-                    }
+                Label {
+                    Layout.fillWidth: true
+                    text: "任务导航"
+                    color: theme.textPrimary
+                    font.pixelSize: 18
+                    font.bold: true
                 }
 
                 Repeater {
@@ -417,56 +349,40 @@ ApplicationWindow {
                     delegate: Item {
                         visible: window.navItemVisible(modelData)
                         Layout.fillWidth: true
-                        Layout.preferredHeight: visible ? 58 : 0
+                        Layout.preferredHeight: visible ? 44 : 0
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 22
-                            color: window.currentPage === modelData.key ? theme.glassStrong : "#10000000"
-                            border.color: window.currentPage === modelData.key ? theme.accentCyan : "#3d5b6c"
+                            radius: theme.radiusSmall
+                            color: window.currentPage === modelData.key ? theme.glassStrong : "transparent"
+                            border.color: window.currentPage === modelData.key ? theme.accentCyan : "#2e3c4b"
                             border.width: 1
-                            scale: navHover.containsMouse ? 1.01 : 1.0
-
-                            Behavior on scale {
-                                NumberAnimation { duration: 120 }
-                            }
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 10
+                                anchors.margins: 9
+                                spacing: 8
 
-                                Rectangle {
-                                    Layout.preferredWidth: 38
-                                    Layout.preferredHeight: 38
-                                    radius: 14
-                                    color: window.currentPage === modelData.key ? theme.accentCyanDeep : "#173243"
-
-                                    Label {
-                                        anchors.centerIn: parent
-                                        text: modelData.badge
-                                        color: "#eef5f8"
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.letterSpacing: 1.1
-                                    }
+                                Label {
+                                    text: modelData.badge
+                                    color: window.currentPage === modelData.key ? theme.accentCyanDeep : "#b9c7d1"
+                                    font.pixelSize: 11
+                                    font.bold: true
                                 }
 
                                 Label {
                                     Layout.fillWidth: true
                                     text: modelData.label
                                     color: window.currentPage === modelData.key ? theme.textBody : theme.textPrimary
-                                    font.pixelSize: 16
+                                    font.pixelSize: 14
                                     font.bold: true
-                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
                                 }
                             }
                         }
 
                         MouseArea {
-                            id: navHover
                             anchors.fill: parent
-                            hoverEnabled: true
                             onClicked: window.currentPage = modelData.key
                         }
                     }
@@ -476,40 +392,40 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    radius: 24
-                    color: "#14000000"
-                    border.color: "#3f5f72"
+                    implicitHeight: 108
+                    radius: theme.radiusMedium
+                    color: "#101923"
+                    border.color: "#314252"
                     border.width: 1
-                    implicitHeight: 140
 
-                    Column {
+                    ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 8
+                        anchors.margins: 10
+                        spacing: 6
 
                         Label {
-                            text: appController.engineeringMode ? "工程模式已启用" : "远程控制模式"
+                            Layout.fillWidth: true
+                            text: appController.engineeringMode ? "工程模式" : "远程运维"
                             color: theme.textPrimary
-                            font.pixelSize: 16
+                            font.pixelSize: 14
                             font.bold: true
                         }
 
                         Label {
-                            width: parent.width
-                            text: appController.engineeringMode
-                                  ? "桌面端保留串口、本地 MQTT 和低层联调能力，安卓与核心页面继续走统一 API。"
-                                  : "当前优先使用局域网 API 和实时同步，适合桌面值守与手机控制。"
-                            wrapMode: Text.Wrap
-                            color: "#bfd1dc"
+                            Layout.fillWidth: true
+                            text: appController.remoteSyncService.healthDeviceSummary
+                            color: "#b9c7d1"
                             font.pixelSize: 12
+                            elide: Text.ElideRight
                         }
 
                         Label {
-                            width: parent.width
-                            text: "本地数据库\n" + appController.localDatabasePath
+                            Layout.fillWidth: true
+                            text: "本地缓存 " + appController.localDatabasePath
                             wrapMode: Text.WrapAnywhere
-                            color: "#d6e4eb"
-                            font.pixelSize: 11
+                            maximumLineCount: 2
+                            color: "#9fb0bc"
+                            font.pixelSize: 10
                         }
                     }
                 }
@@ -519,15 +435,15 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: androidMode ? 0 : 34
-            color: androidMode ? theme.pageSurface : "#f1f6f8"
+            radius: androidMode ? 0 : theme.radiusLarge
+            color: theme.pageSurface
             border.color: androidMode ? "transparent" : theme.borderSoft
             border.width: androidMode ? 0 : 1
             clip: true
 
             StackLayout {
                 anchors.fill: parent
-                anchors.margins: androidMode ? 12 : 18
+                anchors.margins: androidMode ? 10 : 14
                 currentIndex: window.pageIndex()
 
                 DeviceOverviewPage { controller: appController }

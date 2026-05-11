@@ -36,6 +36,11 @@ class DeviceStateStore : public QObject
     Q_PROPERTY(double humidity READ humidity NOTIFY deviceStateChanged)
     Q_PROPERTY(double pressure READ pressure NOTIFY deviceStateChanged)
     Q_PROPERTY(double visibility READ visibility NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool windCapability READ windCapability NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool airCapability READ airCapability NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool rainCapability READ rainCapability NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool pressureCapability READ pressureCapability NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool visibilityCapability READ visibilityCapability NOTIFY deviceStateChanged)
     Q_PROPERTY(bool rainDetected READ rainDetected NOTIFY deviceStateChanged)
     Q_PROPERTY(double rainValue READ rainValue NOTIFY deviceStateChanged)
     Q_PROPERTY(double pm25 READ pm25 NOTIFY deviceStateChanged)
@@ -43,6 +48,12 @@ class DeviceStateStore : public QObject
     Q_PROPERTY(double co2 READ co2 NOTIFY deviceStateChanged)
     Q_PROPERTY(double tvoc READ tvoc NOTIFY deviceStateChanged)
     Q_PROPERTY(double ch2o READ ch2o NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool windSensorOnline READ windSensorOnline NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool airSensorOnline READ airSensorOnline NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool rainSensorOnline READ rainSensorOnline NOTIFY deviceStateChanged)
+    Q_PROPERTY(int sensorFailureCount READ sensorFailureCount NOTIFY deviceStateChanged)
+    Q_PROPERTY(qint64 sensorLastOkTick READ sensorLastOkTick NOTIFY deviceStateChanged)
+    Q_PROPERTY(QString sensorLastError READ sensorLastError NOTIFY deviceStateChanged)
     Q_PROPERTY(QString timestamp READ timestamp NOTIFY deviceStateChanged)
     Q_PROPERTY(int activeAlarmCount READ activeAlarmCount NOTIFY deviceStateChanged)
     Q_PROPERTY(QString lastAckSummary READ lastAckSummary NOTIFY ackChanged)
@@ -81,6 +92,11 @@ public:
     double humidity() const;
     double pressure() const;
     double visibility() const;
+    bool windCapability() const;
+    bool airCapability() const;
+    bool rainCapability() const;
+    bool pressureCapability() const;
+    bool visibilityCapability() const;
     bool rainDetected() const;
     double rainValue() const;
     double pm25() const;
@@ -88,6 +104,12 @@ public:
     double co2() const;
     double tvoc() const;
     double ch2o() const;
+    bool windSensorOnline() const;
+    bool airSensorOnline() const;
+    bool rainSensorOnline() const;
+    int sensorFailureCount() const;
+    qint64 sensorLastOkTick() const;
+    QString sensorLastError() const;
     QString timestamp() const;
     int activeAlarmCount() const;
     QString lastAckSummary() const;

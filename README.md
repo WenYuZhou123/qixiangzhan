@@ -1,124 +1,164 @@
-# qixiangzhan
+# qixiangzhan 气象站边缘主站
 
-基于 `STM32H743 + L610 + EMQX + FastAPI + Qt` 的气象站/远程控制平台工程。
+这是一个面向现场落地的气象站与远程运维平台工程，核心形态是：
 
-这个仓库包含三部分能力：
+- `STM32H743 + L610 + LCD` 负责本地采集、显示、4G/MQTT 上报和现场控制。
+- `Jetson + FastAPI + MySQL + MQTT bridge` 负责边缘主站、数据入库、健康监控和本地服务。
+- `Qt Desktop + Qt Android` 负责桌面值守、移动端查看、命令下发、告警和历史数据。
+- `Cloudflare Tunnel` 负责公网 HTTPS 访问，不再依赖腾讯云 80/443 入口。
 
-- 设备端固件：`STM32H743 + L610`，通过公网 `EMQX` 上报状态、接收命令
-- 平台后端：`FastAPI + MySQL`，负责鉴权、设备数据汇总、命令下发、WebSocket 实时推送
-- 客户端：`Qt Desktop + Qt Android`，支持设备查看、历史记录、告警、远程控制；桌面端保留工程模式下的串口与 MQTT 调试
+当前正式 API 地址：
 
-## 项目结构
+```text
+https://qixiangzhan.online/api/v1
+```
+
+健康检查地址：
+
+```text
+https://qixiangzhan.online/healthz
+```
+
+## 系统架构
+
+```text
+STM32H743 + Sensors + LCD
+        |
+        | L610 / MQTT TLS
+        v
+      EMQX
+        |
+        v
+Jetson edge master
+  - FastAPI
+  - MySQL
+  - MQTT bridge
+  - system health
+        |
+        | Cloudflare Tunnel / HTTPS / WebSocket
+        v
+Qt Desktop / Qt Android / Browser docs
+```
+
+## 仓库目录
 
 ```text
 qixiangzhan/
-├─ Core/              STM32Cube 生成的核心代码
-├─ HARDWARE/          L610、协议、传感器、业务模块
-├─ Drivers/           STM32 HAL / CMSIS
-├─ MDK-ARM/           Keil 工程
-├─ backend/           FastAPI 后端
-├─ qt-client/         Qt 桌面端与安卓端
-├─ deploy/linux/      Linux 云服务器部署模板
-├─ docs/              中文操作手册、部署文档、联调说明
-└─ scripts/           本地启动、打包、环境检查脚本
+├─ Core/                 STM32CubeMX 生成代码，谨慎改动路径
+├─ Drivers/              STM32 HAL / CMSIS，工具链依赖目录
+├─ MDK-ARM/              Keil 工程文件和启动文件
+├─ HARDWARE/             L610、LCD、传感器、业务驱动代码
+├─ backend/              FastAPI 后端、MySQL 模型、MQTT bridge
+├─ qt-client/            Qt 桌面端和 Android App
+├─ deploy/linux/         Jetson/Linux 部署样例、systemd、Caddy、备份脚本
+├─ docs/                 部署、联调、数据库、验收文档
+├─ scripts/              Windows 构建、启动、Qt/Android 辅助脚本
+└─ qixiangzhan.ioc       STM32CubeMX 工程入口
 ```
 
-## 功能概览
+更详细的代码地图见 [docs/repository_map_zh.md](docs/repository_map_zh.md)。
 
-- 设备通过 MQTT 上报在线状态、遥测数据、ACK、事件
-- 后端写入 MySQL，并通过 `WS /api/v1/ws/realtime` 推送实时消息
-- Qt 客户端支持：
-  - 登录鉴权
-  - 设备总览与详情
-  - 命令/消息历史
-  - 告警中心
-  - 安卓远程访问
-  - Windows 工程模式串口诊断
-- 支持跨局域网访问：
-  - 正式环境 API：`https://api.qixiangzhan.online/api/v1`
-  - 正式环境实时地址：`wss://api.qixiangzhan.online/api/v1/ws/realtime`
+## 快速启动
 
-## 当前默认参数
-
-- 设备 ID：`relay_h743_001`
-- MQTT Host：`rc11adc1.ala.cn-hangzhou.emqxsl.cn`
-- MQTT Port：`8883`
-- MQTT Username：`h743`
-- MQTT Password：`123456`
-- 本地联调 API：`http://127.0.0.1:8000/api/v1`
-- 公网正式 API：`https://api.qixiangzhan.online/api/v1`
-- 后端管理员账号：`admin / admin123`
-
-## 快速开始
-
-### 1. 后端
+### 1. 启动后端
 
 ```powershell
-Set-Location .\backend
+Set-Location D:\Competition\code_main\qixiangzhan\backend
 py -3.14 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
+alembic -c alembic.ini upgrade head
 py -3.14 -m uvicorn app.main:app --reload
 ```
 
-### 2. 桌面端一键联调
+本地后端默认监听：
+
+```text
+http://127.0.0.1:8000
+```
+
+### 2. 启动 Qt 桌面端
 
 ```powershell
 Set-Location D:\Competition\code_main\qixiangzhan
 .\scripts\start_desktop_stack.cmd
 ```
 
-### 3. 安卓 APK 构建
+桌面端和 Android App 的生产 API 默认值已经统一为：
+
+```text
+https://qixiangzhan.online/api/v1
+```
+
+### 3. 构建 Android APK
 
 ```powershell
 Set-Location D:\Competition\code_main\qixiangzhan
 .\scripts\build_android_apk.cmd
 ```
 
-安卓 release 构建前，如需默认接入公网地址：
+Release 包可通过环境变量覆盖 API：
 
 ```powershell
-$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://api.qixiangzhan.online/api/v1"
+$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://qixiangzhan.online/api/v1"
 .\scripts\build_android_apk.cmd -Configuration Release
 ```
 
-## 公网部署
+## 交付验收路径
 
-推荐部署模型：
+### Jetson / 后端
 
-- 云服务器运行 `FastAPI + MySQL + Caddy`
-- 域名 `api.qixiangzhan.online` 指向云服务器公网 IP
-- Caddy 提供 HTTPS 反向代理
-- 设备继续连公网 EMQX
-- Android 与 Windows 普通用户统一走 `HTTPS API + WebSocket`
+- `GET https://qixiangzhan.online/healthz` 返回 `status=ok`。
+- `POST /api/v1/auth/login` 可登录。
+- `GET /api/v1/devices` 能返回设备列表。
+- `GET /api/v1/system/health` 能看到 API、MySQL、MQTT、磁盘和最近设备数据。
+- MQTT 上报后，`devices`、`telemetry_messages`、`weather_observations`、`weather.project` 数据持续增长。
 
-部署参考：
+### Qt 桌面端
 
-- [docs/public_remote_deployment_guide.md](docs/public_remote_deployment_guide.md)
-- [deploy/linux/README.md](deploy/linux/README.md)
+- 使用 `https://qixiangzhan.online/api/v1` 登录。
+- 能查看设备在线状态、核心气象数据、告警、命令历史和 Jetson 健康摘要。
+- 工程模式下可使用串口诊断和本地调试功能。
 
-## 主要文档
+### Android App
 
-- [docs/platform_operation_manual_zh.md](docs/platform_operation_manual_zh.md)
-- [docs/h743_l610_qt_quick_start.md](docs/h743_l610_qt_quick_start.md)
-- [backend/README.md](backend/README.md)
-- [qt-client/README.md](qt-client/README.md)
+- 使用公网 HTTPS API 登录，不直接连接 MQTT 或 MySQL。
+- 设备列表、实时状态、历史、告警和控制命令可用。
+- 弱网或 WebSocket 不可用时，REST 轮询仍能保持基本可用。
 
-## GitHub 仓库建议
+### STM32 / 现场端
 
-建议把以下内容提交到 GitHub：
+- LCD 页面无明显整屏闪烁。
+- L610 MQTT 链路能稳定连接 EMQX。
+- 风速/风向、雨滴、CJ702 空气质量等传感器状态能上报诊断信息。
+- 控制命令有 ACK 闭环。
 
-- 固件源码
-- `backend/` 后端源码
-- `qt-client/` 客户端源码
-- `docs/` 文档
-- `deploy/linux/` 部署模板
-- `scripts/` 辅助脚本
+## 关键文档
 
-不建议提交：
+- 文档导航：[docs/README.md](docs/README.md)
+- Jetson 现场部署：[docs/jetson_edge_master_guide_zh.md](docs/jetson_edge_master_guide_zh.md)
+- Qt/Android 客户端：[qt-client/README.md](qt-client/README.md)
+- 后端服务：[backend/README.md](backend/README.md)
+- Linux 部署包：[deploy/linux/README.md](deploy/linux/README.md)
+- Navicat/MySQL：[docs/navicat_mysql_setup.md](docs/navicat_mysql_setup.md)
+- 硬件联调：[docs/h743_l610_qt_quick_start.md](docs/h743_l610_qt_quick_start.md)
 
-- `backend/.venv/`
-- `qt-client/build/`
-- keystore、签名文件、`.env`
-- 临时日志和本地缓存
+## Git 提交建议
+
+建议提交：
+
+- `HARDWARE/`、`Core/`、`Drivers/`、`MDK-ARM/` 中的固件源码和工程定义。
+- `backend/` 后端源码、迁移脚本和依赖清单。
+- `qt-client/` 客户端源码、QML、CMake 配置。
+- `docs/`、`deploy/`、`scripts/`。
+- `README.md`、`.gitignore`、`.gitattributes`、`.editorconfig`。
+
+不要提交：
+
+- Python 虚拟环境、`.env`、密钥、证书、Android keystore。
+- Qt/Android 构建目录、APK/AAB、本地 DLL/EXE 输出。
+- Keil 中间产物和输出文件。
+- 本地数据库、日志、临时文件。
+
+本仓库保留 STM32CubeMX/Keil 的原始目录布局。除非同步更新工具链配置，不要移动 `Core/`、`Drivers/`、`MDK-ARM/` 或 `qixiangzhan.ioc`。

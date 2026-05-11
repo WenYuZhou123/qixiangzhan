@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
@@ -59,6 +59,27 @@ class PadSummaryResponse(BaseModel):
     mode: str = "auto"
 
 
+class WeatherCapabilitiesResponse(BaseModel):
+    wind: bool = True
+    air: bool = True
+    rain: bool = True
+    pressure: bool = False
+    visibility: bool = False
+
+
+class WeatherSensorStatusResponse(BaseModel):
+    wind_online: bool = False
+    air_online: bool = False
+    rain_online: bool = False
+    failure_count: int = 0
+    last_ok_tick: int = 0
+    last_error: str = ""
+    wind_last_tx_hex: str = ""
+    wind_last_rx_hex: str = ""
+    air_last_frame_hex: str = ""
+    l610_state: str = ""
+
+
 class WeatherSummaryResponse(BaseModel):
     wind_speed: float = 0.0
     wind_direction: float = 0.0
@@ -78,6 +99,30 @@ class WeatherSummaryResponse(BaseModel):
     co2: float = 0.0
     tvoc: float = 0.0
     ch2o: float = 0.0
+    capabilities: WeatherCapabilitiesResponse = Field(default_factory=WeatherCapabilitiesResponse)
+    sensor_status: WeatherSensorStatusResponse = Field(default_factory=WeatherSensorStatusResponse)
+
+
+class ProjectTelemetryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    device_id: str
+    temperature: int = 0
+    humidity: int = 0
+    speed: int = 0
+    direction: str = ""
+    uv: str = ""
+    raindrop: str = ""
+    pm: int = 0
+    air_pressure: int = 0
+    altitude: int = 0
+    pressure: str = ""
+    distance: int = 0
+    electric: int = 0
+    posture: str = ""
+    complex: str = ""
+    longitude: float = 0.0
 
 
 class DeviceResponse(BaseModel):
@@ -93,6 +138,7 @@ class DeviceResponse(BaseModel):
     relay2: bool
     pad: PadSummaryResponse
     weather: WeatherSummaryResponse
+    project: ProjectTelemetryResponse | None = None
     state_text: str
     tick: int
     protocol_profile: str = "relay_v1"
@@ -166,6 +212,59 @@ class CommandCreateResponse(BaseModel):
     command: str
     status: str
     created_at: datetime
+
+
+class WeatherObservationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    device_id: str
+    msg_id: str | None = None
+    topic: str
+    observed_at: datetime
+    created_at: datetime
+    wind_speed: float = 0.0
+    wind_direction: float = 0.0
+    wind_speed_raw: int = 0
+    wind_direction_raw: int = 0
+    rain_adc_raw: int = 0
+    wind_direction_text: str = ""
+    rain_level_text: str = ""
+    temperature: float = 0.0
+    humidity: float = 0.0
+    pressure: float = 0.0
+    visibility: float = 0.0
+    rain_detected: bool = False
+    rain_value: float = 0.0
+    pm25: float = 0.0
+    pm10: float = 0.0
+    co2: float = 0.0
+    tvoc: float = 0.0
+    ch2o: float = 0.0
+    capabilities: Any
+    sensor_status: Any = None
+
+
+class DeviceDiagnosticsResponse(BaseModel):
+    device_id: str
+    online: bool
+    last_seen_at: datetime | None = None
+    updated_at: datetime | None = None
+    l610: dict[str, Any]
+    sensor_status: dict[str, Any]
+    last_state: Any = None
+
+
+class SystemHealthResponse(BaseModel):
+    status: str
+    time: datetime
+    uptime_seconds: float
+    api: dict[str, Any]
+    mysql: dict[str, Any]
+    mqtt: dict[str, Any]
+    disk: dict[str, Any]
+    devices: dict[str, Any]
+    retention: dict[str, Any]
 
 
 class UserResponse(BaseModel):

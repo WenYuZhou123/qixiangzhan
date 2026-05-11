@@ -13,7 +13,7 @@ The current firmware, Qt client, and backend already use the same defaults:
 - MQTT password: `123456`
 - MQTT TLS: `enabled`
 - API base for local lab bring-up: `http://127.0.0.1:8000/api/v1`
-- API base for public deployment: `https://api.qixiangzhan.online/api/v1`
+- API base for public deployment: `https://qixiangzhan.online/api/v1`
 - Backend login: `admin / admin123`
 - Serial baud rate: `115200`
 
@@ -122,7 +122,7 @@ After opening the Qt desktop app:
 2. Use `admin / admin123` to sign in.
 3. If the backend is not running, you can still use the local fallback account `admin / admin123`.
 
-For public deployment across different LANs, switch `API Base` to `https://api.qixiangzhan.online/api/v1`.
+For public deployment across different LANs, switch `API Base` to `https://qixiangzhan.online/api/v1`.
 
 Main pages in the current app:
 

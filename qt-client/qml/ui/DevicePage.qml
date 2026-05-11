@@ -14,34 +14,11 @@ ScrollView {
 
     TaskTheme { id: theme }
 
-    component CommandButton: Button {
-        property color fillColor: theme.glassStrong
-        property color labelColor: theme.textBody
-        Layout.fillWidth: true
-        implicitHeight: root.mobile ? 54 : 50
-
-        contentItem: Text {
-            text: parent.text
-            color: parent.enabled ? parent.labelColor : "#70808b"
-            font.pixelSize: root.mobile ? 17 : 15
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        background: Rectangle {
-            radius: 22
-            color: parent.enabled ? parent.fillColor : theme.neutral
-            border.color: theme.borderSoft
-            border.width: 1
-            opacity: parent.down ? 0.88 : 1.0
-        }
-    }
-
     component ValueCard: Rectangle {
         required property string title
         required property string value
         required property string caption
+
         Layout.fillWidth: true
         radius: theme.radiusMedium
         color: theme.glassSoft
@@ -71,6 +48,7 @@ ScrollView {
                 text: parent.parent.caption
                 color: theme.textMuted
                 font.pixelSize: 11
+                wrapMode: Text.Wrap
             }
         }
     }
@@ -104,7 +82,7 @@ ScrollView {
                         spacing: 4
 
                         Label {
-                            text: "停机场控制"
+                            text: "设备详情"
                             color: theme.textPrimary
                             font.pixelSize: root.mobile ? 26 : 34
                             font.bold: true
@@ -137,9 +115,7 @@ ScrollView {
 
                 Label {
                     width: parent.width
-                    text: padDevice
-                          ? "支持停机场打开、关闭、停止与状态查询，左右舱门状态会分别回传。"
-                          : "当前设备仍是工程测试设备。停机场新协议设备接入后，这里会显示正式控制面板。"
+                    text: "详情页同步跟随新的测量能力规则，只展示真实接入的环境数据。"
                     wrapMode: Text.Wrap
                     color: "#cfdae2"
                     font.pixelSize: 13
@@ -161,24 +137,7 @@ ScrollView {
 
                         Label {
                             anchors.centerIn: parent
-                            text: "左门 " + theme.padStateText(store.padLeftState)
-                            color: theme.textPrimary
-                            font.pixelSize: 13
-                            font.bold: true
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 38
-                        radius: 16
-                        color: "#12000000"
-                        border.color: "#6d8999"
-                        border.width: 1
-
-                        Label {
-                            anchors.centerIn: parent
-                            text: "右门 " + theme.padStateText(store.padRightState)
+                            text: padDevice ? "停机坪协议" : theme.protocolText(store.protocolProfile)
                             color: theme.textPrimary
                             font.pixelSize: 13
                             font.bold: true
@@ -218,92 +177,22 @@ ScrollView {
                             font.bold: true
                         }
                     }
-                }
-            }
-        }
 
-        Rectangle {
-            Layout.fillWidth: true
-            radius: theme.radiusLarge
-            color: "#fbfcfd"
-            border.color: theme.borderSoft
-            border.width: 1
-            implicitHeight: root.mobile ? 330 : 250
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 38
+                        radius: 16
+                        color: "#12000000"
+                        border.color: "#6d8999"
+                        border.width: 1
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: root.mobile ? 16 : 18
-                spacing: 14
-
-                Label {
-                    text: "实时操作"
-                    color: theme.textBody
-                    font.pixelSize: 24
-                    font.bold: true
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: root.mobile ? 1 : 2
-                    columnSpacing: 12
-                    rowSpacing: 12
-
-                    CommandButton {
-                        text: "打开停机场"
-                        enabled: padDevice && root.controller.commandConnected && !root.busy
-                        fillColor: "#d9eaee"
-                        labelColor: theme.accentCyanDeep
-                        onClicked: root.controller.padOpen()
-                    }
-
-                    CommandButton {
-                        text: "关闭停机场"
-                        enabled: padDevice && root.controller.commandConnected && !root.busy
-                        fillColor: "#ece4dc"
-                        labelColor: "#5a4432"
-                        onClicked: root.controller.padClose()
-                    }
-
-                    CommandButton {
-                        text: "停止动作"
-                        enabled: padDevice && root.controller.commandConnected && !root.busy
-                        fillColor: "#ece1e2"
-                        labelColor: "#5b3640"
-                        onClicked: root.controller.padStop()
-                    }
-
-                    CommandButton {
-                        text: "刷新状态"
-                        enabled: root.controller.commandConnected && !root.busy
-                        fillColor: theme.glassStrong
-                        labelColor: theme.textBody
-                        onClicked: root.controller.queryPadStatus()
-                    }
-                }
-
-                Label {
-                    visible: !padDevice
-                    width: parent.width
-                    text: controller.engineeringMode
-                          ? "这是继电器工程测试设备。若要继续本地联调，请切换到工程模式页使用旧控制链。"
-                          : "当前设备尚未上报停机场新协议字段。接入 airport_pad_v1 后，这里会显示完整控制能力。"
-                    wrapMode: Text.Wrap
-                    color: theme.textMuted
-                    font.pixelSize: 13
-                }
-
-                RowLayout {
-                    visible: !padDevice && controller.engineeringMode
-                    spacing: 10
-
-                    Button {
-                        text: "打开工程模式页"
-                        onClicked: controller.currentPage = "engineering"
-                    }
-
-                    Button {
-                        text: "查看串口"
-                        onClicked: controller.currentPage = "serial"
+                        Label {
+                            anchors.centerIn: parent
+                            text: busy ? "命令处理中" : "状态稳定"
+                            color: theme.textPrimary
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
                     }
                 }
             }
@@ -321,7 +210,7 @@ ScrollView {
                 color: "#fbfcfd"
                 border.color: theme.borderSoft
                 border.width: 1
-                implicitHeight: 220
+                implicitHeight: 232
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -329,7 +218,7 @@ ScrollView {
                     spacing: 12
 
                     Label {
-                        text: "停机场状态"
+                        text: "停机坪状态"
                         color: theme.textBody
                         font.pixelSize: 24
                         font.bold: true
@@ -342,27 +231,27 @@ ScrollView {
                         rowSpacing: 12
 
                         ValueCard {
-                            title: "左舱门"
+                            title: "左门"
                             value: theme.padStateText(store.padLeftState)
-                            caption: "机械舱门 A"
+                            caption: "机械门 A"
                         }
 
                         ValueCard {
-                            title: "右舱门"
+                            title: "右门"
                             value: theme.padStateText(store.padRightState)
-                            caption: "机械舱门 B"
+                            caption: "机械门 B"
                         }
 
                         ValueCard {
-                            title: "就绪度"
-                            value: store.padReady ? "允许降落" : "待命"
-                            caption: theme.occupancyText(store.padOccupied)
+                            title: "继电器"
+                            value: "R1 " + theme.relayStateText(store.relay1On) + " / R2 " + theme.relayStateText(store.relay2On)
+                            caption: "控制页与本地 LCD 同步"
                         }
 
                         ValueCard {
-                            title: "控制模式"
+                            title: "模式"
                             value: theme.padModeText(store.padMode)
-                            caption: "自动 / 手动 / 维护"
+                            caption: theme.connectionStateText(controller.runtimeConnectionState)
                         }
                     }
                 }
@@ -374,7 +263,7 @@ ScrollView {
                 color: "#fbfcfd"
                 border.color: theme.borderSoft
                 border.width: 1
-                implicitHeight: 220
+                implicitHeight: 232
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -382,7 +271,7 @@ ScrollView {
                     spacing: 12
 
                     Label {
-                        text: "最新回执"
+                        text: "环境摘要"
                         color: theme.textBody
                         font.pixelSize: 24
                         font.bold: true
@@ -390,20 +279,36 @@ ScrollView {
 
                     Label {
                         width: parent.width
-                        text: store.lastAckSummary.length > 0 ? store.lastAckSummary : "尚未收到新的任务回执"
+                        text: store.windCapability
+                              ? "风速 " + Number(store.windSpeed).toFixed(1) + " m/s · 风向 "
+                                + (store.windDirectionText.length > 0 ? store.windDirectionText + " " : "")
+                                + Number(store.windDirection).toFixed(0) + "°"
+                              : "当前设备未接入风场模块"
                         wrapMode: Text.Wrap
-                        color: theme.textBody
-                        font.pixelSize: 18
-                        font.bold: true
+                        color: theme.textMuted
+                        font.pixelSize: 13
                     }
 
                     Label {
                         width: parent.width
-                        text: store.lastError.length > 0
-                              ? "错误：" + store.lastError
-                              : (root.busy ? "命令处理中，请等待状态回传。" : "控制通道空闲，可继续操作。")
+                        text: store.airCapability
+                              ? "温度 " + Number(store.temperature).toFixed(1) + " °C · 湿度 "
+                                + Number(store.humidity).toFixed(0) + "% · PM2.5 "
+                                + Number(store.pm25).toFixed(0)
+                              : "当前设备未接入空气模块"
                         wrapMode: Text.Wrap
-                        color: store.lastError.length > 0 ? theme.danger : theme.textMuted
+                        color: theme.textMuted
+                        font.pixelSize: 13
+                    }
+
+                    Label {
+                        width: parent.width
+                        text: store.rainCapability
+                              ? (store.rainDetected ? "已检测到雨滴" : "未检测到雨滴") + " · 湿润度 "
+                                + Number(store.rainValue).toFixed(0) + "%"
+                              : "当前设备未接入雨滴模块"
+                        wrapMode: Text.Wrap
+                        color: theme.textMuted
                         font.pixelSize: 13
                     }
 
@@ -421,41 +326,29 @@ ScrollView {
                             spacing: 8
 
                             Label {
-                                text: "当前气象"
+                                text: "最新回执"
                                 color: theme.textBody
                                 font.pixelSize: 16
                                 font.bold: true
                             }
 
                             Label {
-                                text: "风速 " + Number(store.windSpeed).toFixed(1) + " m/s  ·  能见度 "
-                                      + Number(store.visibility).toFixed(1) + " km"
-                                color: theme.textMuted
-                                font.pixelSize: 12
-                            }
-
-                            Label {
-                                text: "雨滴 " + (store.rainDetected ? "检测到" : "未检测到")
-                                      + "  ·  PM2.5 " + Number(store.pm25).toFixed(0)
-                                      + "  ·  PM10 " + Number(store.pm10).toFixed(0)
-                                color: theme.textMuted
-                                font.pixelSize: 12
-                            }
-
-                            Label {
-                                text: "CO2 " + Number(store.co2).toFixed(0)
-                                      + " ppm  ·  TVOC " + Number(store.tvoc).toFixed(3)
-                                      + " mg/m3  ·  CH2O " + Number(store.ch2o).toFixed(3) + " mg/m3"
-                                color: theme.textMuted
-                                font.pixelSize: 12
+                                width: parent.width
+                                text: store.lastAckSummary.length > 0 ? store.lastAckSummary : "尚未收到新的任务回执"
                                 wrapMode: Text.Wrap
+                                color: theme.textBody
+                                font.pixelSize: 16
+                                font.bold: true
                             }
 
                             Label {
-                                text: "适航建议：" + theme.flightRuleText(store.windSpeed, store.visibility)
-                                color: theme.flightRuleColor(store.windSpeed, store.visibility)
-                                font.pixelSize: 14
-                                font.bold: true
+                                width: parent.width
+                                text: store.lastError.length > 0
+                                      ? "错误：" + store.lastError
+                                      : "未接入测量项已从详情页自动移除。"
+                                wrapMode: Text.Wrap
+                                color: store.lastError.length > 0 ? theme.danger : theme.textMuted
+                                font.pixelSize: 12
                             }
                         }
                     }

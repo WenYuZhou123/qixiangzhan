@@ -2725,6 +2725,13 @@ L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
 {
     App_DeviceStatus_t status;
     char escaped_status[MQTT_JSON_BUF_SIZE];
+    char escaped_wind_direction[APP_STATUS_FIELD_LEN * 2U];
+    char escaped_rain_level[APP_STATUS_FIELD_LEN * 2U];
+    char escaped_last_error[APP_STATUS_TEXT_LEN];
+    char escaped_wind_tx[APP_STATUS_TEXT_LEN];
+    char escaped_wind_rx[APP_STATUS_TEXT_LEN];
+    char escaped_air_frame[APP_STATUS_TEXT_LEN];
+    char escaped_mqtt_stage[APP_STATUS_FIELD_LEN * 2U];
     char timestamp[MQTT_TIMESTAMP_BUF_SIZE];
 
     if (out_buf == NULL || buf_size == 0)
@@ -2735,6 +2742,13 @@ L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
     App_FillDeviceStatus(&status);
     MQTT_FormatTimestamp(timestamp, sizeof(timestamp));
     MQTT_EscapeJson(status.state_text, escaped_status, sizeof(escaped_status));
+    MQTT_EscapeJson(status.weather.wind_direction_text, escaped_wind_direction, sizeof(escaped_wind_direction));
+    MQTT_EscapeJson(status.weather.rain_level_text, escaped_rain_level, sizeof(escaped_rain_level));
+    MQTT_EscapeJson(status.weather.sensor_last_error, escaped_last_error, sizeof(escaped_last_error));
+    MQTT_EscapeJson(status.weather.wind_last_tx_hex, escaped_wind_tx, sizeof(escaped_wind_tx));
+    MQTT_EscapeJson(status.weather.wind_last_rx_hex, escaped_wind_rx, sizeof(escaped_wind_rx));
+    MQTT_EscapeJson(status.last_cj702_frame_hex, escaped_air_frame, sizeof(escaped_air_frame));
+    MQTT_EscapeJson(status.l610_mqtt_stage, escaped_mqtt_stage, sizeof(escaped_mqtt_stage));
 
     snprintf(out_buf, buf_size,
              "{\"type\":\"status\",\"device_id\":\"%s\",\"online\":%u,\"relay1\":%u,\"relay2\":%u,"
@@ -2742,9 +2756,15 @@ L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
              "\"protocol_profile\":\"airport_pad_v1\",\"timestamp\":\"%s\","
              "\"net\":{\"rssi\":%d,\"operator\":\"%s\",\"ip\":\"%s\"},"
              "\"pad\":{\"left_state\":\"%s\",\"right_state\":\"%s\",\"ready\":%u,\"occupied\":%u,\"mode\":\"%s\"},"
-             "\"weather\":{\"wind_speed\":%.2f,\"wind_direction\":%.2f,\"temperature\":%.2f,\"humidity\":%.2f,"
-             "\"pressure\":%.2f,\"visibility\":%.2f,\"rain_detected\":%u,\"rain_value\":%.2f,"
-             "\"pm25\":%.2f,\"pm10\":%.2f,\"co2\":%.2f,\"tvoc\":%.4f,\"ch2o\":%.4f}}",
+             "\"weather\":{\"wind_speed\":%.2f,\"wind_direction\":%.2f,\"wind_speed_raw\":%u,\"wind_direction_raw\":%u,"
+             "\"rain_adc_raw\":%u,\"wind_direction_text\":\"%s\",\"rain_level_text\":\"%s\","
+             "\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f,\"visibility\":%.2f,"
+             "\"capabilities\":{\"wind\":%u,\"air\":%u,\"rain\":%u,\"pressure\":%u,\"visibility\":%u},"
+             "\"rain_detected\":%u,\"rain_value\":%.2f,"
+             "\"pm25\":%.2f,\"pm10\":%.2f,\"co2\":%.2f,\"tvoc\":%.4f,\"ch2o\":%.4f,"
+             "\"sensor_status\":{\"wind_online\":%u,\"air_online\":%u,\"rain_online\":%u,\"failure_count\":%u,"
+             "\"last_ok_tick\":%lu,\"last_error\":\"%s\",\"wind_last_tx_hex\":\"%s\","
+             "\"wind_last_rx_hex\":\"%s\",\"air_last_frame_hex\":\"%s\",\"l610_state\":\"%s\"}}}",
              status.device_id,
              (unsigned int)status.online,
              (unsigned int)status.relay1,
@@ -2765,17 +2785,37 @@ L610_MQTT_Status_t L610_MQTT_BuildStatusJson(char *out_buf, uint16_t buf_size)
              status.pad.mode,
              (double)status.weather.wind_speed,
              (double)status.weather.wind_direction,
+             (unsigned int)status.weather.wind_speed_raw,
+             (unsigned int)status.weather.wind_direction_raw,
+             (unsigned int)status.weather.rain_adc_raw,
+             escaped_wind_direction,
+             escaped_rain_level,
              (double)status.weather.temperature,
              (double)status.weather.humidity,
              (double)status.weather.pressure,
              (double)status.weather.visibility,
+             (unsigned int)status.weather.capability_wind,
+             (unsigned int)status.weather.capability_air,
+             (unsigned int)status.weather.capability_rain,
+             (unsigned int)status.weather.capability_pressure,
+             (unsigned int)status.weather.capability_visibility,
              (unsigned int)status.weather.rain_detected,
              (double)status.weather.rain_value,
              (double)status.weather.pm25,
              (double)status.weather.pm10,
              (double)status.weather.co2,
              (double)status.weather.tvoc,
-             (double)status.weather.ch2o);
+             (double)status.weather.ch2o,
+             (unsigned int)status.weather.wind_online,
+             (unsigned int)status.weather.air_online,
+             (unsigned int)status.weather.rain_online,
+             (unsigned int)status.weather.sensor_failure_count,
+             (unsigned long)status.weather.sensor_last_ok_tick,
+             escaped_last_error,
+             escaped_wind_tx,
+             escaped_wind_rx,
+             escaped_air_frame,
+             escaped_mqtt_stage);
 
     return L610_MQTT_OK;
 }
