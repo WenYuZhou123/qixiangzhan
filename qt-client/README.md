@@ -68,7 +68,7 @@ Set-Location D:\Competition\code_main\qixiangzhan
 Override the default API base for release:
 
 ```powershell
-$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://api.qixiangzhan.online/api/v1"
+$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://qixiangzhan.online/api/v1"
 .\scripts\build_android_apk.cmd -Configuration Release
 ```
 
@@ -158,4 +158,4 @@ The release script automatically runs `apksigner verify --verbose` after packagi
 - Desktop defaults to API-first remote mode after backend login.
 - Windows engineering mode keeps serial diagnostics and direct MQTT for lab use.
 - Android uses HTTPS API and falls back to REST polling if WebSocket is unavailable.
-- Recommended production API base: `https://api.qixiangzhan.online/api/v1`
+- Recommended production API base: `https://qixiangzhan.online/api/v1`

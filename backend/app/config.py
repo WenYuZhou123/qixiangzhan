@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     public_api_base: str = "https://api.qixiangzhan.online/api/v1"
     database_url: str = "mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4"
+    project_database_url: str = "mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/weather?charset=utf8mb4"
     mqtt_host: str = "rc11adc1.ala.cn-hangzhou.emqxsl.cn"
     mqtt_port: int = 8883
     mqtt_username: str = "h743"
@@ -21,6 +22,8 @@ class Settings(BaseSettings):
     refresh_token_days: int = 30
     offline_seconds: int = 90
     ack_timeout_seconds: int = 15
+    retention_days: int = 90
+    retention_cleanup_interval_seconds: int = 3600
     ws_heartbeat_seconds: int = 20
     json_logs: bool = False
 

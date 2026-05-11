@@ -95,6 +95,8 @@ def ensure_runtime_schema() -> None:
         statements.append("ALTER TABLE devices ADD COLUMN weather_tvoc FLOAT NOT NULL DEFAULT 0")
     if "weather_ch2o" not in device_columns:
         statements.append("ALTER TABLE devices ADD COLUMN weather_ch2o FLOAT NOT NULL DEFAULT 0")
+    if "weather_sensor_status" not in device_columns:
+        statements.append("ALTER TABLE devices ADD COLUMN weather_sensor_status JSON NULL")
 
     with engine.begin() as conn:
         for statement in statements:

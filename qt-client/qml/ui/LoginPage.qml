@@ -293,14 +293,14 @@ ScrollView {
                     TextField {
                         Layout.fillWidth: true
                         text: root.controller.authSession.apiBaseUrl
-                        placeholderText: "例如 http://192.168.1.20:8000/api/v1"
+                        placeholderText: "例如 https://qixiangzhan.online/api/v1"
                         font.pixelSize: mobile ? 18 : 15
                         onEditingFinished: root.controller.authSession.apiBaseUrl = text
                     }
 
                     Label {
                         width: parent.width
-                        text: "桌面本机可直接使用 127.0.0.1；安卓手机请改成电脑的局域网 IP。"
+                        text: "桌面端和安卓端可直接使用 Cloudflare Tunnel 公网 API。"
                         wrapMode: Text.Wrap
                         color: theme.textMuted
                         font.pixelSize: theme.bodySize(mobile)

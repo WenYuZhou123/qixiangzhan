@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -16,8 +16,11 @@ from .models import (
     DeviceMembership,
     RefreshToken,
     TelemetryMessage,
+    SystemEvent,
+    WeatherObservation,
     User,
 )
+from .project_storage import ProjectSessionLocal, ProjectTelemetry, project_database_label
 from .realtime import realtime_hub
 
 SUPPORTED_COMMANDS = {
@@ -38,6 +41,21 @@ DEFAULT_WEATHER_CAPABILITIES = {
     "pressure": False,
     "visibility": False,
 }
+
+DEFAULT_SENSOR_STATUS = {
+    "wind_online": False,
+    "air_online": False,
+    "rain_online": False,
+    "failure_count": 0,
+    "last_ok_tick": 0,
+    "last_error": "",
+    "wind_last_tx_hex": "",
+    "wind_last_rx_hex": "",
+    "air_last_frame_hex": "",
+    "l610_state": "",
+}
+
+PROJECT_STORAGE_FAILURE_ACTIVE = False
 
 
 def utcnow() -> datetime:
@@ -126,6 +144,11 @@ def normalize_payload_map(payload_map: dict[str, Any], topic: str) -> dict[str, 
         weather = payload_map.get("weather")
         if isinstance(weather, dict):
             capabilities = weather_capabilities_from_payload(weather.get("capabilities"))
+            sensor_status = sensor_status_from_payload(weather.get("sensor_status"))
+            if not isinstance(weather.get("sensor_status"), dict):
+                sensor_status["wind_online"] = capabilities["wind"]
+                sensor_status["air_online"] = capabilities["air"]
+                sensor_status["rain_online"] = capabilities["rain"]
             normalized["weather"] = {
                 "wind_speed": coerce_float(weather.get("wind_speed"), 0.0),
                 "wind_direction": coerce_float(weather.get("wind_direction"), 0.0),
@@ -146,6 +169,7 @@ def normalize_payload_map(payload_map: dict[str, Any], topic: str) -> dict[str, 
                 "co2": coerce_float(weather.get("co2"), 0.0),
                 "tvoc": coerce_float(weather.get("tvoc"), 0.0),
                 "ch2o": coerce_float(weather.get("ch2o"), 0.0),
+                "sensor_status": sensor_status,
             }
 
     return normalized
@@ -204,6 +228,124 @@ def coerce_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def payload_child(payload_map: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload_map.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def normalize_project_text(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    return str(value)
+
+
+def normalize_project_pressure(value: Any) -> str:
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if isinstance(value, (int, float)):
+        return "on" if int(value) != 0 else "off"
+    text = str(value or "").strip()
+    return text if text else "off"
+
+
+def direction_to_degrees(value: Any) -> float:
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        pass
+
+    text = str(value).strip().lower()
+    mapping = {
+        "north": 0.0,
+        "n": 0.0,
+        "east": 90.0,
+        "e": 90.0,
+        "south": 180.0,
+        "s": 180.0,
+        "west": 270.0,
+        "w": 270.0,
+        "northeast": 45.0,
+        "ne": 45.0,
+        "southeast": 135.0,
+        "se": 135.0,
+        "southwest": 225.0,
+        "sw": 225.0,
+        "northwest": 315.0,
+        "nw": 315.0,
+        "北": 0.0,
+        "东": 90.0,
+        "南": 180.0,
+        "西": 270.0,
+        "东北": 45.0,
+        "东南": 135.0,
+        "西南": 225.0,
+        "西北": 315.0,
+    }
+    return mapping.get(text, 0.0)
+
+
+def raindrop_detected(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value).strip().lower()
+    return text not in {"", "0", "false", "off", "none", "normal", "no", "无", "无雨"}
+
+
+def extract_project_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
+    project = payload_child(payload_map, "project")
+    weather = payload_child(payload_map, "weather")
+
+    direction_value = first_present(
+        project.get("direction"),
+        payload_map.get("direction"),
+        weather.get("wind_direction_text"),
+        payload_map.get("weather_wind_direction_text"),
+        weather.get("wind_direction"),
+        payload_map.get("weather_wind_direction"),
+    )
+    raindrop_value = first_present(
+        project.get("raindrop"),
+        payload_map.get("raindrop"),
+        weather.get("rain_level_text"),
+        payload_map.get("weather_rain_level_text"),
+        "Detected" if coerce_bool(weather.get("rain_detected", payload_map.get("weather_rain_detected")), False) else "",
+    )
+
+    return {
+        "device_id": str(first_present(project.get("device_id"), payload_map.get("device_id")) or ""),
+        "temperature": coerce_int(first_present(project.get("temperature"), payload_map.get("temperature"), weather.get("temperature"), payload_map.get("weather_temperature")), 0),
+        "humidity": coerce_int(first_present(project.get("humidity"), payload_map.get("humidity"), weather.get("humidity"), payload_map.get("weather_humidity")), 0),
+        "speed": coerce_int(first_present(project.get("speed"), payload_map.get("speed"), weather.get("wind_speed"), payload_map.get("weather_wind_speed")), 0),
+        "direction": normalize_project_text(direction_value),
+        "uv": normalize_project_text(first_present(project.get("uv"), payload_map.get("uv"))),
+        "raindrop": normalize_project_text(raindrop_value),
+        "pm": coerce_int(first_present(project.get("pm"), payload_map.get("pm"), weather.get("pm25"), payload_map.get("weather_pm25")), 0),
+        "air_pressure": coerce_int(first_present(project.get("air_pressure"), payload_map.get("air_pressure"), weather.get("pressure"), payload_map.get("weather_pressure")), 0),
+        "altitude": coerce_int(first_present(project.get("altitude"), payload_map.get("altitude")), 0),
+        "pressure": normalize_project_pressure(first_present(project.get("pressure"), payload_map.get("pressure"), payload_map.get("pressure_status"), payload_map.get("weather_pressure_status"))),
+        "distance": coerce_int(first_present(project.get("distance"), payload_map.get("distance"), weather.get("visibility"), payload_map.get("weather_visibility")), 0),
+        "electric": coerce_int(first_present(project.get("electric"), payload_map.get("electric"), payload_map.get("battery"), payload_map.get("battery_percent")), 0),
+        "posture": normalize_project_text(first_present(project.get("posture"), payload_map.get("posture"))),
+        "complex": normalize_project_text(first_present(project.get("complex"), payload_map.get("complex"))),
+        "longitude": coerce_float(first_present(project.get("longitude"), payload_map.get("longitude")), 0.0),
+    }
+
+
 def weather_capabilities_from_payload(value: Any) -> dict[str, bool]:
     capabilities = dict(DEFAULT_WEATHER_CAPABILITIES)
 
@@ -212,6 +354,25 @@ def weather_capabilities_from_payload(value: Any) -> dict[str, bool]:
             capabilities[key] = coerce_bool(value.get(key), fallback)
 
     return capabilities
+
+
+def sensor_status_from_payload(value: Any) -> dict[str, Any]:
+    status: dict[str, Any] = dict(DEFAULT_SENSOR_STATUS)
+
+    if not isinstance(value, dict):
+        return status
+
+    status["wind_online"] = coerce_bool(value.get("wind_online"), False)
+    status["air_online"] = coerce_bool(value.get("air_online"), False)
+    status["rain_online"] = coerce_bool(value.get("rain_online"), False)
+    status["failure_count"] = coerce_int(value.get("failure_count"), 0)
+    status["last_ok_tick"] = coerce_int(value.get("last_ok_tick"), 0)
+    status["last_error"] = str(value.get("last_error") or "")
+    status["wind_last_tx_hex"] = str(value.get("wind_last_tx_hex") or "")
+    status["wind_last_rx_hex"] = str(value.get("wind_last_rx_hex") or "")
+    status["air_last_frame_hex"] = str(value.get("air_last_frame_hex") or "")
+    status["l610_state"] = str(value.get("l610_state") or "")
+    return status
 
 
 def normalize_pad_state(value: Any, fallback: str = "closed") -> str:
@@ -224,6 +385,7 @@ def extract_pad_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
     pad = payload_map.get("pad")
     if not isinstance(pad, dict):
         pad = {}
+
     return {
         "left_state": normalize_pad_state(pad.get("left_state") or payload_map.get("pad_left_state"), "closed"),
         "right_state": normalize_pad_state(pad.get("right_state") or payload_map.get("pad_right_state"), "closed"),
@@ -237,6 +399,7 @@ def extract_weather_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
     weather = payload_map.get("weather")
     if not isinstance(weather, dict):
         weather = {}
+    project = extract_project_summary(payload_map)
     capabilities = weather_capabilities_from_payload(
         weather.get("capabilities")
         or {
@@ -247,26 +410,40 @@ def extract_weather_summary(payload_map: dict[str, Any]) -> dict[str, Any]:
             "visibility": payload_map.get("weather_capability_visibility"),
         }
     )
+    project_payload = payload_child(payload_map, "project")
+    if "air_pressure" in project_payload or "air_pressure" in payload_map:
+        capabilities["pressure"] = True
+    if "distance" in project_payload or "distance" in payload_map:
+        capabilities["visibility"] = True
+    sensor_status = sensor_status_from_payload(
+        weather.get("sensor_status", payload_map.get("weather_sensor_status"))
+    )
+    if not isinstance(weather.get("sensor_status", payload_map.get("weather_sensor_status")), dict):
+        sensor_status["wind_online"] = capabilities["wind"]
+        sensor_status["air_online"] = capabilities["air"]
+        sensor_status["rain_online"] = capabilities["rain"]
+
     return {
-        "wind_speed": coerce_float(weather.get("wind_speed", payload_map.get("weather_wind_speed")), 0.0),
-        "wind_direction": coerce_float(weather.get("wind_direction", payload_map.get("weather_wind_direction")), 0.0),
+        "wind_speed": coerce_float(first_present(weather.get("wind_speed"), payload_map.get("weather_wind_speed"), project["speed"]), 0.0),
+        "wind_direction": coerce_float(first_present(weather.get("wind_direction"), payload_map.get("weather_wind_direction"), direction_to_degrees(project["direction"])), 0.0),
         "wind_speed_raw": coerce_int(weather.get("wind_speed_raw", payload_map.get("weather_wind_speed_raw")), 0),
         "wind_direction_raw": coerce_int(weather.get("wind_direction_raw", payload_map.get("weather_wind_direction_raw")), 0),
         "rain_adc_raw": coerce_int(weather.get("rain_adc_raw", payload_map.get("weather_rain_adc_raw")), 0),
-        "wind_direction_text": str(weather.get("wind_direction_text", payload_map.get("weather_wind_direction_text")) or ""),
-        "rain_level_text": str(weather.get("rain_level_text", payload_map.get("weather_rain_level_text")) or ""),
-        "temperature": coerce_float(weather.get("temperature", payload_map.get("weather_temperature")), 0.0),
-        "humidity": coerce_float(weather.get("humidity", payload_map.get("weather_humidity")), 0.0),
-        "pressure": coerce_float(weather.get("pressure", payload_map.get("weather_pressure")), 0.0),
-        "visibility": coerce_float(weather.get("visibility", payload_map.get("weather_visibility")), 0.0),
+        "wind_direction_text": str(first_present(weather.get("wind_direction_text"), payload_map.get("weather_wind_direction_text"), project["direction"]) or ""),
+        "rain_level_text": str(first_present(weather.get("rain_level_text"), payload_map.get("weather_rain_level_text"), project["raindrop"]) or ""),
+        "temperature": coerce_float(first_present(weather.get("temperature"), payload_map.get("weather_temperature"), project["temperature"]), 0.0),
+        "humidity": coerce_float(first_present(weather.get("humidity"), payload_map.get("weather_humidity"), project["humidity"]), 0.0),
+        "pressure": coerce_float(first_present(weather.get("pressure"), payload_map.get("weather_pressure"), project["air_pressure"]), 0.0),
+        "visibility": coerce_float(first_present(weather.get("visibility"), payload_map.get("weather_visibility"), project["distance"]), 0.0),
         "capabilities": capabilities,
-        "rain_detected": coerce_bool(weather.get("rain_detected", payload_map.get("weather_rain_detected")), False),
+        "rain_detected": coerce_bool(first_present(weather.get("rain_detected"), payload_map.get("weather_rain_detected"), raindrop_detected(project["raindrop"])), False),
         "rain_value": coerce_float(weather.get("rain_value", payload_map.get("weather_rain_value")), 0.0),
-        "pm25": coerce_float(weather.get("pm25", payload_map.get("weather_pm25")), 0.0),
+        "pm25": coerce_float(first_present(weather.get("pm25"), payload_map.get("weather_pm25"), project["pm"]), 0.0),
         "pm10": coerce_float(weather.get("pm10", payload_map.get("weather_pm10")), 0.0),
         "co2": coerce_float(weather.get("co2", payload_map.get("weather_co2")), 0.0),
         "tvoc": coerce_float(weather.get("tvoc", payload_map.get("weather_tvoc")), 0.0),
         "ch2o": coerce_float(weather.get("ch2o", payload_map.get("weather_ch2o")), 0.0),
+        "sensor_status": sensor_status,
     }
 
 
@@ -454,7 +631,37 @@ def create_command_payload(
     return payload, encoded
 
 
-def serialize_device(device: Device, active_alarm_count: int = 0) -> dict[str, Any]:
+def serialize_project_telemetry(project: ProjectTelemetry | None) -> dict[str, Any] | None:
+    if project is None:
+        return None
+    return {
+        "id": int(project.id),
+        "device_id": project.device_id,
+        "temperature": int(project.temperature),
+        "humidity": int(project.humidity),
+        "speed": int(project.speed),
+        "direction": project.direction,
+        "uv": project.uv,
+        "raindrop": project.raindrop,
+        "pm": int(project.pm),
+        "air_pressure": int(project.air_pressure),
+        "altitude": int(project.altitude),
+        "pressure": project.pressure,
+        "distance": int(project.distance),
+        "electric": int(project.electric),
+        "posture": project.posture,
+        "complex": project.complex,
+        "longitude": float(project.longitude),
+    }
+
+
+def serialize_device(device: Device, active_alarm_count: int = 0, project: ProjectTelemetry | None = None) -> dict[str, Any]:
+    sensor_status = sensor_status_from_payload(device.weather_sensor_status or {})
+    if not device.weather_sensor_status:
+        sensor_status["wind_online"] = device.weather_capability_wind
+        sensor_status["air_online"] = device.weather_capability_air
+        sensor_status["rain_online"] = device.weather_capability_rain
+
     return {
         "device_id": device.device_id,
         "display_name": device.display_name,
@@ -497,7 +704,9 @@ def serialize_device(device: Device, active_alarm_count: int = 0) -> dict[str, A
             "co2": device.weather_co2,
             "tvoc": device.weather_tvoc,
             "ch2o": device.weather_ch2o,
+            "sensor_status": sensor_status,
         },
+        "project": serialize_project_telemetry(project),
         "state_text": device.state_text,
         "tick": device.tick,
         "protocol_profile": device.protocol_profile,
@@ -706,6 +915,165 @@ def update_last_state(db: Session, device_id: str, payload: dict[str, Any]) -> N
     row.updated_at = utcnow()
 
 
+def payload_timestamp(payload_map: dict[str, Any], fallback: datetime) -> datetime:
+    value = payload_map.get("timestamp")
+    if not value:
+        return fallback
+    try:
+        text = str(value).replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(text)
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def upsert_weather_observation(
+    db: Session,
+    *,
+    device_id: str,
+    msg_id: str | None,
+    topic: str,
+    payload: dict[str, Any] | str,
+    payload_map: dict[str, Any],
+    weather: dict[str, Any],
+    now: datetime,
+) -> None:
+    observation = None
+    if msg_id:
+        observation = db.scalar(
+            select(WeatherObservation).where(
+                WeatherObservation.device_id == device_id,
+                WeatherObservation.msg_id == msg_id,
+                WeatherObservation.topic == topic,
+            )
+        )
+
+    if observation is None:
+        observation = WeatherObservation(
+            device_id=device_id,
+            msg_id=msg_id,
+            topic=topic,
+            observed_at=payload_timestamp(payload_map, now),
+            created_at=now,
+            capabilities=weather["capabilities"],
+            sensor_status=weather["sensor_status"],
+            payload=payload,
+        )
+        db.add(observation)
+
+    observation.wind_speed = weather["wind_speed"]
+    observation.wind_direction = weather["wind_direction"]
+    observation.wind_speed_raw = weather["wind_speed_raw"]
+    observation.wind_direction_raw = weather["wind_direction_raw"]
+    observation.rain_adc_raw = weather["rain_adc_raw"]
+    observation.wind_direction_text = weather["wind_direction_text"]
+    observation.rain_level_text = weather["rain_level_text"]
+    observation.temperature = weather["temperature"]
+    observation.humidity = weather["humidity"]
+    observation.pressure = weather["pressure"]
+    observation.visibility = weather["visibility"]
+    observation.rain_detected = weather["rain_detected"]
+    observation.rain_value = weather["rain_value"]
+    observation.pm25 = weather["pm25"]
+    observation.pm10 = weather["pm10"]
+    observation.co2 = weather["co2"]
+    observation.tvoc = weather["tvoc"]
+    observation.ch2o = weather["ch2o"]
+    observation.capabilities = weather["capabilities"]
+    observation.sensor_status = weather["sensor_status"]
+    observation.payload = payload
+
+
+def write_project_telemetry(
+    db: Session,
+    *,
+    device_id: str,
+    payload_map: dict[str, Any],
+) -> None:
+    global PROJECT_STORAGE_FAILURE_ACTIVE
+
+    project = extract_project_summary(payload_map)
+    project["device_id"] = device_id
+
+    try:
+        with ProjectSessionLocal() as project_db:
+            project_db.add(ProjectTelemetry(**project))
+            project_db.commit()
+    except Exception as exc:  # pragma: no cover - depends on optional external database
+        if not PROJECT_STORAGE_FAILURE_ACTIVE:
+            create_system_event(
+                db,
+                event_type="project.write_failed",
+                severity="warning",
+                source="project-db",
+                message="weather.project write failed; main telemetry pipeline is still running",
+                payload={
+                    "database_url": project_database_label(),
+                    "error": str(exc),
+                },
+            )
+            PROJECT_STORAGE_FAILURE_ACTIVE = True
+        return
+
+    if PROJECT_STORAGE_FAILURE_ACTIVE:
+        create_system_event(
+            db,
+            event_type="project.write_recovered",
+            severity="info",
+            source="project-db",
+            message="weather.project write recovered",
+            payload={"database_url": project_database_label()},
+        )
+    PROJECT_STORAGE_FAILURE_ACTIVE = False
+
+
+def create_system_event(
+    db: Session,
+    *,
+    event_type: str,
+    message: str,
+    severity: str = "info",
+    source: str = "backend",
+    payload: dict[str, Any] | str | None = None,
+    commit: bool = False,
+) -> None:
+    db.add(
+        SystemEvent(
+            event_type=event_type,
+            severity=severity,
+            source=source,
+            message=message,
+            payload=payload or {},
+            created_at=utcnow(),
+        )
+    )
+    if commit:
+        db.commit()
+
+
+def prune_runtime_history(db: Session, *, retention_days: int | None = None) -> dict[str, int]:
+    days = retention_days if retention_days is not None else settings.retention_days
+    threshold = naive_utc(utcnow() - timedelta(days=days))
+    deleted: dict[str, int] = {}
+    for model, label in (
+        (WeatherObservation, "weather_observations"),
+        (TelemetryMessage, "telemetry_messages"),
+        (CommandMessage, "command_messages"),
+        (SystemEvent, "system_events"),
+    ):
+        result = db.execute(delete(model).where(model.created_at < threshold))
+        deleted[label] = int(result.rowcount or 0)
+
+    create_system_event(
+        db,
+        event_type="retention.cleanup",
+        message=f"Pruned records older than {days} days",
+        payload={"deleted": deleted, "retention_days": days},
+    )
+    db.commit()
+    return deleted
+
+
 def upsert_telemetry_message(
     db: Session,
     *,
@@ -848,6 +1216,7 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
         device.weather_co2 = weather["co2"]
         device.weather_tvoc = weather["tvoc"]
         device.weather_ch2o = weather["ch2o"]
+        device.weather_sensor_status = weather["sensor_status"]
         device.state_text = str(payload_map.get("state") or "")
         device.tick = coerce_int(payload_map.get("tick"), 0)
         if is_legacy_status_topic(topic):
@@ -859,6 +1228,21 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
         else:
             device.protocol_profile = "relay_v1"
         update_last_state(db, device_id, payload_map)
+        upsert_weather_observation(
+            db,
+            device_id=device_id,
+            msg_id=msg_id,
+            topic=topic,
+            payload=payload,
+            payload_map=payload_map,
+            weather=weather,
+            now=now,
+        )
+        write_project_telemetry(
+            db,
+            device_id=device_id,
+            payload_map=payload_map,
+        )
         resolved_command_rows = resolve_pending_commands_from_status(
             db,
             device_id=device_id,
@@ -871,6 +1255,27 @@ def record_message(db: Session, topic: str, raw_payload: bytes) -> None:
             set_alarm_state(db, device_id, "low_rssi", "warning", f"Device RSSI is low: {device.rssi}", "mqtt", True)
         else:
             set_alarm_state(db, device_id, "low_rssi", "warning", "Device RSSI recovered", "mqtt", False)
+
+        sensor_status = weather["sensor_status"]
+        weather_stale = False
+        for sensor_key, capability_key, label in (
+            ("wind_online", "wind", "Wind sensor"),
+            ("air_online", "air", "Air sensor"),
+            ("rain_online", "rain", "Rain sensor"),
+        ):
+            alarm_code = sensor_key.replace("_online", "_sensor_offline")
+            should_check = bool(weather["capabilities"].get(capability_key))
+            sensor_online = coerce_bool(sensor_status.get(sensor_key), should_check)
+            if should_check and not sensor_online:
+                weather_stale = True
+                set_alarm_state(db, device_id, alarm_code, "warning", f"{label} offline", "mqtt", True)
+            else:
+                set_alarm_state(db, device_id, alarm_code, "warning", f"{label} recovered", "mqtt", False)
+
+        if device.online and weather_stale:
+            set_alarm_state(db, device_id, "weather_stale", "warning", "Device online but weather data is degraded", "mqtt", True)
+        else:
+            set_alarm_state(db, device_id, "weather_stale", "warning", "Weather data recovered", "mqtt", False)
 
     if topic_kind == "ack":
         if msg_id:

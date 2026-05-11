@@ -374,6 +374,22 @@ static void App_L610DiagTask(void)
     L610_EndSession(L610_OWNER_DIAG);
 }
 
+static uint32_t App_MaxU32(uint32_t a, uint32_t b)
+{
+    return (a > b) ? a : b;
+}
+
+static uint32_t App_GetWeatherLastOkTick(void)
+{
+    uint32_t tick = 0U;
+
+    tick = App_MaxU32(tick, g_wind_sensor.speed_last_ok_tick);
+    tick = App_MaxU32(tick, g_wind_sensor.direction_last_ok_tick);
+    tick = App_MaxU32(tick, g_air_sensor.base.last_update_tick);
+    tick = App_MaxU32(tick, g_rain_sensor.base.last_update_tick);
+    return tick;
+}
+
 void App_FillDeviceStatus(App_DeviceStatus_t *status)
 {
     L610_Info_t info;
@@ -447,7 +463,13 @@ void App_FillDeviceStatus(App_DeviceStatus_t *status)
     status->weather.wind_query_error_count = BSP_Uart_GetRxErrorCount(&g_uart_wind);
     status->weather.cj702_online = g_air_sensor.base.online;
     status->weather.wind_online = g_weather_data.wind_online;
+    status->weather.air_online = g_weather_data.air_online;
     status->weather.rain_online = g_weather_data.rain_online;
+    status->weather.sensor_last_ok_tick = App_GetWeatherLastOkTick();
+    status->weather.sensor_failure_count = (uint16_t)g_wind_sensor.speed_failures +
+                                           (uint16_t)g_wind_sensor.direction_failures +
+                                           (uint16_t)((g_weather_data.air_online == 0U) ? 1U : 0U) +
+                                           (uint16_t)((g_weather_data.rain_online == 0U) ? 1U : 0U);
     status->alarm_count = 0U;
     status->last_status_publish_ok = L610_MQTT_GetLastStatusPublishOk();
     status->last_status_publish_tick = L610_MQTT_GetLastStatusPublishTick();
@@ -525,6 +547,9 @@ void App_FillDeviceStatus(App_DeviceStatus_t *status)
                 (L610_MQTT_IsConnected() != 0) ? "OK" : L610_MQTT_GetStateString(),
                 sizeof(status->last_error_text) - 1U);
     }
+    strncpy(status->weather.sensor_last_error,
+            status->last_error_text,
+            sizeof(status->weather.sensor_last_error) - 1U);
     strncpy(status->last_cj702_frame_hex,
             (AirSensor_LastFrameHex()[0] != '\0') ? AirSensor_LastFrameHex() : "N/A",
             sizeof(status->last_cj702_frame_hex) - 1U);

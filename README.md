@@ -217,6 +217,7 @@ $env:QXZ_CLIENT_DEFAULT_API_BASE = "https://api.qixiangzhan.online/api/v1"
 - [docs/platform_operation_manual_zh.md](docs/platform_operation_manual_zh.md)
 - [docs/h743_l610_qt_quick_start.md](docs/h743_l610_qt_quick_start.md)
 - [docs/public_remote_deployment_guide.md](docs/public_remote_deployment_guide.md)
+- [docs/jetson_edge_master_guide_zh.md](docs/jetson_edge_master_guide_zh.md)
 - [backend/README.md](backend/README.md)
 - [qt-client/README.md](qt-client/README.md)
 

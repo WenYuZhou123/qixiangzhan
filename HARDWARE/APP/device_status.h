@@ -53,7 +53,11 @@ typedef struct
     uint32_t wind_query_error_count;
     uint8_t cj702_online;
     uint8_t wind_online;
+    uint8_t air_online;
     uint8_t rain_online;
+    uint32_t sensor_last_ok_tick;
+    uint16_t sensor_failure_count;
+    char sensor_last_error[APP_STATUS_TEXT_LEN];
 } App_WeatherStatus_t;
 
 typedef struct

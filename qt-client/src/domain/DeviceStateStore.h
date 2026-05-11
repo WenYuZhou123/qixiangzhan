@@ -48,6 +48,12 @@ class DeviceStateStore : public QObject
     Q_PROPERTY(double co2 READ co2 NOTIFY deviceStateChanged)
     Q_PROPERTY(double tvoc READ tvoc NOTIFY deviceStateChanged)
     Q_PROPERTY(double ch2o READ ch2o NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool windSensorOnline READ windSensorOnline NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool airSensorOnline READ airSensorOnline NOTIFY deviceStateChanged)
+    Q_PROPERTY(bool rainSensorOnline READ rainSensorOnline NOTIFY deviceStateChanged)
+    Q_PROPERTY(int sensorFailureCount READ sensorFailureCount NOTIFY deviceStateChanged)
+    Q_PROPERTY(qint64 sensorLastOkTick READ sensorLastOkTick NOTIFY deviceStateChanged)
+    Q_PROPERTY(QString sensorLastError READ sensorLastError NOTIFY deviceStateChanged)
     Q_PROPERTY(QString timestamp READ timestamp NOTIFY deviceStateChanged)
     Q_PROPERTY(int activeAlarmCount READ activeAlarmCount NOTIFY deviceStateChanged)
     Q_PROPERTY(QString lastAckSummary READ lastAckSummary NOTIFY ackChanged)
@@ -98,6 +104,12 @@ public:
     double co2() const;
     double tvoc() const;
     double ch2o() const;
+    bool windSensorOnline() const;
+    bool airSensorOnline() const;
+    bool rainSensorOnline() const;
+    int sensorFailureCount() const;
+    qint64 sensorLastOkTick() const;
+    QString sensorLastError() const;
     QString timestamp() const;
     int activeAlarmCount() const;
     QString lastAckSummary() const;

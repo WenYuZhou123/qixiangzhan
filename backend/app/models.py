@@ -60,6 +60,7 @@ class Device(Base):
     weather_co2: Mapped[float] = mapped_column(Float, default=0.0)
     weather_tvoc: Mapped[float] = mapped_column(Float, default=0.0)
     weather_ch2o: Mapped[float] = mapped_column(Float, default=0.0)
+    weather_sensor_status: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     state_text: Mapped[str] = mapped_column(String(256), default="")
     tick: Mapped[int] = mapped_column(Integer, default=0)
     protocol_profile: Mapped[str] = mapped_column(String(64), default="relay_v1", index=True)
@@ -78,7 +79,7 @@ class DeviceMembership(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    device_id: Mapped[str] = mapped_column(String(128), index=True)
+    device_id: Mapped[str] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -93,7 +94,7 @@ class RefreshToken(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     label: Mapped[str] = mapped_column(String(128), default="")
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -106,6 +107,58 @@ class DeviceLastState(Base):
     device_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     payload: Mapped[dict] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class WeatherObservation(Base):
+    __tablename__ = "weather_observations"
+    __table_args__ = (
+        Index("ix_weather_observations_device_observed_at", "device_id", "observed_at"),
+        Index("ix_weather_observations_device_created_at", "device_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(String(128), index=True)
+    msg_id: Mapped[str | None] = mapped_column(String(128), index=True, nullable=True)
+    topic: Mapped[str] = mapped_column(String(256), index=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    wind_speed: Mapped[float] = mapped_column(Float, default=0.0)
+    wind_direction: Mapped[float] = mapped_column(Float, default=0.0)
+    wind_speed_raw: Mapped[int] = mapped_column(Integer, default=0)
+    wind_direction_raw: Mapped[int] = mapped_column(Integer, default=0)
+    rain_adc_raw: Mapped[int] = mapped_column(Integer, default=0)
+    wind_direction_text: Mapped[str] = mapped_column(String(32), default="")
+    rain_level_text: Mapped[str] = mapped_column(String(32), default="")
+    temperature: Mapped[float] = mapped_column(Float, default=0.0)
+    humidity: Mapped[float] = mapped_column(Float, default=0.0)
+    pressure: Mapped[float] = mapped_column(Float, default=0.0)
+    visibility: Mapped[float] = mapped_column(Float, default=0.0)
+    rain_detected: Mapped[bool] = mapped_column(Boolean, default=False)
+    rain_value: Mapped[float] = mapped_column(Float, default=0.0)
+    pm25: Mapped[float] = mapped_column(Float, default=0.0)
+    pm10: Mapped[float] = mapped_column(Float, default=0.0)
+    co2: Mapped[float] = mapped_column(Float, default=0.0)
+    tvoc: Mapped[float] = mapped_column(Float, default=0.0)
+    ch2o: Mapped[float] = mapped_column(Float, default=0.0)
+    capabilities: Mapped[dict] = mapped_column(JSON)
+    sensor_status: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    payload: Mapped[dict | str] = mapped_column(JSON)
+
+
+class SystemEvent(Base):
+    __tablename__ = "system_events"
+    __table_args__ = (
+        Index("ix_system_events_event_type_created_at", "event_type", "created_at"),
+        Index("ix_system_events_severity_created_at", "severity", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    severity: Mapped[str] = mapped_column(String(16), default="info")
+    source: Mapped[str] = mapped_column(String(64), default="backend")
+    message: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict | str] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
 
 
 class TelemetryMessage(Base):
@@ -188,5 +241,5 @@ class AuditLog(Base):
     remote_addr: Mapped[str] = mapped_column(String(128), default="")
     user_agent: Mapped[str] = mapped_column(String(256), default="")
     message: Mapped[str] = mapped_column(Text, default="")
-    payload: Mapped[dict | str] = mapped_column(JSON, default={})
+    payload: Mapped[dict | str] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)

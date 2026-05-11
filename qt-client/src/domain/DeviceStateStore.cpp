@@ -102,6 +102,16 @@ void applyWeatherCapabilities(DeviceState &state, const QJsonObject &json)
     state.pressureCapability = readBoolLike(json, "pressure", state.pressureCapability);
     state.visibilityCapability = readBoolLike(json, "visibility", state.visibilityCapability);
 }
+
+void applySensorStatus(DeviceState &state, const QJsonObject &json)
+{
+    state.windSensorOnline = readBoolLike(json, "wind_online", state.windSensorOnline);
+    state.airSensorOnline = readBoolLike(json, "air_online", state.airSensorOnline);
+    state.rainSensorOnline = readBoolLike(json, "rain_online", state.rainSensorOnline);
+    state.sensorFailureCount = readInt(json, "failure_count", state.sensorFailureCount);
+    state.sensorLastOkTick = readLongLong(json, "last_ok_tick", state.sensorLastOkTick);
+    state.sensorLastError = readString(json, "last_error", state.sensorLastError);
+}
 }
 
 DeviceStateStore::DeviceStateStore(QObject *parent)
@@ -353,6 +363,42 @@ double DeviceStateStore::ch2o() const
     return state != nullptr ? state->ch2o : 0.0;
 }
 
+bool DeviceStateStore::windSensorOnline() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->windSensorOnline : true;
+}
+
+bool DeviceStateStore::airSensorOnline() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->airSensorOnline : true;
+}
+
+bool DeviceStateStore::rainSensorOnline() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->rainSensorOnline : true;
+}
+
+int DeviceStateStore::sensorFailureCount() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->sensorFailureCount : 0;
+}
+
+qint64 DeviceStateStore::sensorLastOkTick() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->sensorLastOkTick : 0;
+}
+
+QString DeviceStateStore::sensorLastError() const
+{
+    const DeviceState *state = currentState();
+    return state != nullptr ? state->sensorLastError : QString();
+}
+
 QString DeviceStateStore::timestamp() const
 {
     const DeviceState *state = currentState();
@@ -448,6 +494,11 @@ void DeviceStateStore::updateStatus(const QJsonObject &json)
         state.co2 = readDouble(weather, "co2", state.co2);
         state.tvoc = readDouble(weather, "tvoc", state.tvoc);
         state.ch2o = readDouble(weather, "ch2o", state.ch2o);
+        if (weather.contains(QStringLiteral("sensor_status")) &&
+            weather.value(QStringLiteral("sensor_status")).isObject())
+        {
+            applySensorStatus(state, weather.value(QStringLiteral("sensor_status")).toObject());
+        }
     }
     else
     {

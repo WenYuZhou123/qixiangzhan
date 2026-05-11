@@ -251,6 +251,14 @@ static void render_debug(const LCD_UI_Model_t *model)
              (unsigned long)s->weather.wind_query_rx_count,
              (unsigned long)s->weather.wind_query_error_count);
     LCD_Port_DrawText(18U, 370U, footer, LCD_PORT_COLOR_DANGER, 0U);
+
+    snprintf(footer, sizeof(footer), "SENS %u/%u/%u FAIL %u LAST %lu",
+             (unsigned)s->weather.wind_online,
+             (unsigned)s->weather.air_online,
+             (unsigned)s->weather.rain_online,
+             (unsigned)s->weather.sensor_failure_count,
+             (unsigned long)s->weather.sensor_last_ok_tick);
+    LCD_Port_DrawText(18U, 392U, footer, LCD_PORT_COLOR_SUCCESS, 0U);
 }
 
 void LCD_UI_RenderPage(LCD_Page_t page, const LCD_UI_Model_t *model)

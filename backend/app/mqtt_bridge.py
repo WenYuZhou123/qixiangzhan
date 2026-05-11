@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 
 from .config import settings
 from .database import SessionLocal
-from .services import record_message
+from .services import create_system_event, record_message
 
 logger = logging.getLogger(__name__)
 MQTT_PUBLISH_WAIT_TIMEOUT_SEC = 2.0
@@ -73,6 +73,18 @@ class EmqxBridge:
             return
 
         logger.info("MQTT bridge connected")
+        try:
+            with SessionLocal() as session:
+                create_system_event(
+                    session,
+                    event_type="mqtt.connected",
+                    message="MQTT bridge connected",
+                    source="mqtt",
+                    payload={"host": settings.mqtt_host, "port": settings.mqtt_port},
+                    commit=True,
+                )
+        except Exception:  # pragma: no cover
+            logger.exception("MQTT bridge failed to record connect event")
         topics = [
             "device/+/down/cmd",
             "device/+/up/status",
@@ -89,8 +101,25 @@ class EmqxBridge:
         self._connected = False
         if rc == 0:
             logger.info("MQTT bridge disconnected")
-            return
-        logger.warning("MQTT bridge unexpected disconnect: rc=%s", rc)
+            message = "MQTT bridge disconnected"
+            severity = "info"
+        else:
+            logger.warning("MQTT bridge unexpected disconnect: rc=%s", rc)
+            message = f"MQTT bridge unexpected disconnect: rc={rc}"
+            severity = "warning"
+        try:
+            with SessionLocal() as session:
+                create_system_event(
+                    session,
+                    event_type="mqtt.disconnected",
+                    message=message,
+                    severity=severity,
+                    source="mqtt",
+                    payload={"rc": rc},
+                    commit=True,
+                )
+        except Exception:  # pragma: no cover
+            logger.exception("MQTT bridge failed to record disconnect event")
 
     def _on_message(self, client: mqtt.Client, userdata: object, msg: mqtt.MQTTMessage) -> None:
         try:

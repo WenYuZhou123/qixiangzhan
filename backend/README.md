@@ -12,6 +12,7 @@ py -3.14 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
+alembic -c alembic.ini upgrade head
 py -3.14 -m uvicorn app.main:app --reload
 ```
 
@@ -19,6 +20,12 @@ Default database URL:
 
 ```text
 mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4
+```
+
+Optional Navicat `weather.project` mirror database URL:
+
+```text
+mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/weather?charset=utf8mb4
 ```
 
 Recommended production public API base:
@@ -34,11 +41,13 @@ https://api.qixiangzhan.online/api/v1
 - Create app user: `qixiang_app`
 - Start backend once, then verify tables:
   - `users`
-  - `devices`
-  - `device_last_state`
-  - `telemetry_messages`
-  - `command_messages`
-  - `alarms`
+- `devices`
+- `device_last_state`
+- `telemetry_messages`
+- `weather_observations`
+- `command_messages`
+- `alarms`
+- `system_events`
 
 ## Desktop and Android
 
@@ -55,6 +64,10 @@ https://api.qixiangzhan.online/api/v1
 - `GET /api/v1/devices`
 - `GET /api/v1/devices/{device_id}`
 - `GET /api/v1/devices/{device_id}/history`
+- `GET /api/v1/devices/{device_id}/weather/history`
+- `GET /api/v1/devices/{device_id}/diagnostics`
+- `GET /api/v1/project/latest`
+- `GET /api/v1/project/{device_id}/history`
 - `GET /api/v1/devices/{device_id}/alarms`
 - `GET /api/v1/commands`
 - `POST /api/v1/devices/{device_id}/commands`
@@ -63,6 +76,7 @@ https://api.qixiangzhan.online/api/v1
 - `PATCH /api/v1/users/{user_id}`
 - `POST /api/v1/users/{user_id}/devices`
 - `WS /api/v1/ws/realtime`
+- `GET /api/v1/system/health`
 - `GET /healthz`
 
 All `/api/v1/*` endpoints except login/refresh/logout require `Authorization: Bearer <token>`.

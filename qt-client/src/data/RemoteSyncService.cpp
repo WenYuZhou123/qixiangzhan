@@ -99,6 +99,17 @@ void applyWeatherCapabilities(DeviceState &state, const QJsonObject &weather)
     state.visibilityCapability = readBoolLike(capabilities.value(QStringLiteral("visibility")), state.visibilityCapability);
 }
 
+void applySensorStatus(DeviceState &state, const QJsonObject &weather)
+{
+    const QJsonObject sensorStatus = weather.value(QStringLiteral("sensor_status")).toObject();
+    state.windSensorOnline = readBoolLike(sensorStatus.value(QStringLiteral("wind_online")), state.windSensorOnline);
+    state.airSensorOnline = readBoolLike(sensorStatus.value(QStringLiteral("air_online")), state.airSensorOnline);
+    state.rainSensorOnline = readBoolLike(sensorStatus.value(QStringLiteral("rain_online")), state.rainSensorOnline);
+    state.sensorFailureCount = sensorStatus.value(QStringLiteral("failure_count")).toInt(state.sensorFailureCount);
+    state.sensorLastOkTick = static_cast<qint64>(sensorStatus.value(QStringLiteral("last_ok_tick")).toDouble());
+    state.sensorLastError = sensorStatus.value(QStringLiteral("last_error")).toString();
+}
+
 QString responseErrorText(QNetworkReply *reply, const QByteArray &payload)
 {
     QJsonParseError parseError;
@@ -154,6 +165,7 @@ DeviceState deviceStateFromJson(const QJsonObject &object)
     state.co2 = readNumberLike(weather.value(QStringLiteral("co2")));
     state.tvoc = readNumberLike(weather.value(QStringLiteral("tvoc")));
     state.ch2o = readNumberLike(weather.value(QStringLiteral("ch2o")));
+    applySensorStatus(state, weather);
     state.timestamp = object.value(QStringLiteral("last_seen_at")).toString(
         object.value(QStringLiteral("updated_at")).toString());
     state.lastSeenMs = QDateTime::currentMSecsSinceEpoch();
@@ -192,6 +204,40 @@ AlarmRecord alarmRecordFromJson(const QJsonObject &object)
     record.createdAt = object.value(QStringLiteral("created_at")).toString();
     record.resolvedAt = object.value(QStringLiteral("resolved_at")).toString();
     return record;
+}
+
+QString systemHealthSummaryFromJson(const QJsonObject &object)
+{
+    const QJsonObject mqtt = object.value(QStringLiteral("mqtt")).toObject();
+    const QJsonObject disk = object.value(QStringLiteral("disk")).toObject();
+    const QJsonObject devices = object.value(QStringLiteral("devices")).toObject();
+    const QString status = object.value(QStringLiteral("status")).toString(QStringLiteral("unknown"));
+    const bool mqttConnected = readBoolLike(mqtt.value(QStringLiteral("connected")), false);
+    const double freePercent = disk.value(QStringLiteral("free_percent")).toDouble();
+    const QString lastWeather = devices.value(QStringLiteral("last_weather_at")).toString();
+
+    return QStringLiteral("%1 | MQTT %2 | Disk %3% | Weather %4")
+        .arg(status.toUpper(),
+             mqttConnected ? QStringLiteral("UP") : QStringLiteral("DOWN"),
+             QString::number(freePercent, 'f', 1),
+             lastWeather.isEmpty() ? QStringLiteral("n/a") : lastWeather);
+}
+
+QString formatUptime(double secondsValue)
+{
+    const qint64 totalSeconds = static_cast<qint64>(secondsValue);
+    const qint64 days = totalSeconds / 86400;
+    const qint64 hours = (totalSeconds % 86400) / 3600;
+    const qint64 minutes = (totalSeconds % 3600) / 60;
+    if (days > 0)
+    {
+        return QStringLiteral("%1d %2h").arg(days).arg(hours);
+    }
+    if (hours > 0)
+    {
+        return QStringLiteral("%1h %2m").arg(hours).arg(minutes);
+    }
+    return QStringLiteral("%1m").arg(minutes);
 }
 
 bool isPendingStatus(const QString &status)
@@ -351,6 +397,71 @@ bool RemoteSyncService::connected() const
 QString RemoteSyncService::lastError() const
 {
     return m_lastError;
+}
+
+QString RemoteSyncService::systemHealthSummary() const
+{
+    return m_systemHealthSummary;
+}
+
+QString RemoteSyncService::systemHealthStatus() const
+{
+    return m_systemHealthStatus;
+}
+
+bool RemoteSyncService::healthApiOk() const
+{
+    return m_healthApiOk;
+}
+
+bool RemoteSyncService::healthMysqlOk() const
+{
+    return m_healthMysqlOk;
+}
+
+bool RemoteSyncService::healthMqttConnected() const
+{
+    return m_healthMqttConnected;
+}
+
+double RemoteSyncService::healthDiskFreePercent() const
+{
+    return m_healthDiskFreePercent;
+}
+
+QString RemoteSyncService::healthUptimeText() const
+{
+    return m_healthUptimeText;
+}
+
+QString RemoteSyncService::healthDeviceSummary() const
+{
+    return m_healthDeviceSummary;
+}
+
+QString RemoteSyncService::healthLastSeenAt() const
+{
+    return m_healthLastSeenAt;
+}
+
+QString RemoteSyncService::healthLastWeatherAt() const
+{
+    return m_healthLastWeatherAt;
+}
+
+QString RemoteSyncService::healthDiskSummary() const
+{
+    return m_healthDiskSummary;
+}
+
+QString RemoteSyncService::healthMqttSummary() const
+{
+    return m_healthMqttSummary;
+}
+
+QString RemoteSyncService::healthMysqlSummary() const
+{
+    return m_healthMysqlSummary;
 }
 
 void RemoteSyncService::refreshDevices()
@@ -673,6 +784,43 @@ void RemoteSyncService::refreshCommands()
     });
 }
 
+void RemoteSyncService::refreshSystemHealth()
+{
+    if (!canUseApi() || !beginRequest(QStringLiteral("system-health")))
+    {
+        return;
+    }
+
+    appendLog(QStringLiteral("GET /system/health"));
+    QNetworkReply *reply = m_apiClient->get(QStringLiteral("/system/health"));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const QByteArray payload = reply->readAll();
+        endRequest(QStringLiteral("system-health"));
+
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            handleApiFailure(reply, payload, QStringLiteral("GET /system/health"));
+            reply->deleteLater();
+            return;
+        }
+
+        QJsonParseError parseError;
+        const QJsonDocument json = QJsonDocument::fromJson(payload, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !json.isObject())
+        {
+            setLastError(QStringLiteral("Invalid /system/health payload"));
+            setConnectionState(QStringLiteral("Cloud Parse Error"), false);
+            reply->deleteLater();
+            return;
+        }
+
+        updateSystemHealthFromJson(json.object());
+        setConnectionState(QStringLiteral("Cloud Ready"), true);
+        setLastError(QString());
+        reply->deleteLater();
+    });
+}
+
 void RemoteSyncService::refreshVisibleData()
 {
     if (!canUseApi())
@@ -708,6 +856,11 @@ void RemoteSyncService::refreshVisibleData()
     if (m_currentPage == QStringLiteral("alarms"))
     {
         refreshAlarms();
+        return;
+    }
+    if (m_currentPage == QStringLiteral("settings"))
+    {
+        refreshSystemHealth();
         return;
     }
 
@@ -864,6 +1017,11 @@ void RemoteSyncService::pollCurrentPage()
     if (m_currentPage == QStringLiteral("alarms"))
     {
         refreshAlarms();
+        return;
+    }
+    if (m_currentPage == QStringLiteral("settings"))
+    {
+        refreshSystemHealth();
         return;
     }
     refreshCurrentDevice();
@@ -1230,6 +1388,77 @@ void RemoteSyncService::applyAlarmCacheCounts()
     for (auto it = counts.cbegin(); it != counts.cend(); ++it)
     {
         m_stateStore->updateAlarmCount(it.key(), it.value());
+    }
+}
+
+void RemoteSyncService::updateSystemHealthFromJson(const QJsonObject &object)
+{
+    const QJsonObject api = object.value(QStringLiteral("api")).toObject();
+    const QJsonObject mysql = object.value(QStringLiteral("mysql")).toObject();
+    const QJsonObject mqtt = object.value(QStringLiteral("mqtt")).toObject();
+    const QJsonObject disk = object.value(QStringLiteral("disk")).toObject();
+    const QJsonObject devices = object.value(QStringLiteral("devices")).toObject();
+
+    const QString summary = systemHealthSummaryFromJson(object);
+    const QString status = object.value(QStringLiteral("status")).toString(QStringLiteral("unknown"));
+    const bool apiOk = true;
+    const bool mysqlOk = readBoolLike(mysql.value(QStringLiteral("ok")), false);
+    const bool mqttConnected = readBoolLike(mqtt.value(QStringLiteral("connected")), false);
+    const double freePercent = disk.value(QStringLiteral("free_percent")).toDouble();
+    const QString uptimeText = formatUptime(object.value(QStringLiteral("uptime_seconds")).toDouble());
+    const int onlineDevices = devices.value(QStringLiteral("online")).toInt(api.value(QStringLiteral("connected_devices")).toInt());
+    const int totalDevices = devices.value(QStringLiteral("total")).toInt(api.value(QStringLiteral("total_devices")).toInt());
+    const QString lastSeen = devices.value(QStringLiteral("last_seen_at")).toString();
+    const QString lastWeather = devices.value(QStringLiteral("last_weather_at")).toString();
+    const QString mqttHost = mqtt.value(QStringLiteral("host")).toString();
+    const int mqttPort = mqtt.value(QStringLiteral("port")).toInt();
+    const QString databaseUrl = mysql.value(QStringLiteral("database_url")).toString();
+
+    bool changed = false;
+    auto setString = [&changed](QString &target, const QString &value) {
+        if (target != value)
+        {
+            target = value;
+            changed = true;
+        }
+    };
+    auto setBool = [&changed](bool &target, bool value) {
+        if (target != value)
+        {
+            target = value;
+            changed = true;
+        }
+    };
+    auto setDouble = [&changed](double &target, double value) {
+        if (!qFuzzyCompare(target + 1.0, value + 1.0))
+        {
+            target = value;
+            changed = true;
+        }
+    };
+
+    setString(m_systemHealthSummary, summary);
+    setString(m_systemHealthStatus, status);
+    setBool(m_healthApiOk, apiOk);
+    setBool(m_healthMysqlOk, mysqlOk);
+    setBool(m_healthMqttConnected, mqttConnected);
+    setDouble(m_healthDiskFreePercent, freePercent);
+    setString(m_healthUptimeText, uptimeText);
+    setString(m_healthDeviceSummary, QStringLiteral("%1/%2 在线").arg(onlineDevices).arg(totalDevices));
+    setString(m_healthLastSeenAt, lastSeen.isEmpty() ? QStringLiteral("--") : lastSeen);
+    setString(m_healthLastWeatherAt, lastWeather.isEmpty() ? QStringLiteral("--") : lastWeather);
+    setString(m_healthDiskSummary, QStringLiteral("%1% free").arg(QString::number(freePercent, 'f', 1)));
+    setString(m_healthMqttSummary,
+              mqttHost.isEmpty()
+                  ? (mqttConnected ? QStringLiteral("connected") : QStringLiteral("disconnected"))
+                  : QStringLiteral("%1:%2 %3").arg(mqttHost).arg(mqttPort).arg(mqttConnected ? QStringLiteral("UP") : QStringLiteral("DOWN")));
+    setString(m_healthMysqlSummary, databaseUrl.isEmpty()
+                                      ? (mysqlOk ? QStringLiteral("MySQL OK") : QStringLiteral("MySQL DOWN"))
+                                      : databaseUrl);
+
+    if (changed)
+    {
+        emit systemHealthChanged();
     }
 }
 

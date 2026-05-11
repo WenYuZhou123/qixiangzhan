@@ -44,6 +44,12 @@ struct DeviceState
     double co2 = 0.0;
     double tvoc = 0.0;
     double ch2o = 0.0;
+    bool windSensorOnline = true;
+    bool airSensorOnline = true;
+    bool rainSensorOnline = true;
+    int sensorFailureCount = 0;
+    qint64 sensorLastOkTick = 0;
+    QString sensorLastError;
     QString timestamp;
     qint64 lastSeenMs = 0;
     int activeAlarmCount = 0;
