@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    public_api_base: str = "https://api.qixiangzhan.online/api/v1"
+    public_api_base: str = "https://qixiangzhan.online/api/v1"
     database_url: str = "mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4"
     project_database_url: str = "mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/weather?charset=utf8mb4"
     mqtt_host: str = "rc11adc1.ala.cn-hangzhou.emqxsl.cn"

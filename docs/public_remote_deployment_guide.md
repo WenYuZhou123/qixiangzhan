@@ -1,24 +1,46 @@
-# 公网异地访问部署指南
+# Cloudflare Tunnel 公网访问部署说明
 
-适用于当前 `Qt Desktop + Qt Android + FastAPI + MySQL + EMQX` 项目，目标是让外网 Windows 电脑和 Android 手机都能直接访问。
+当前项目公网访问采用 Cloudflare Tunnel：Jetson 或现场 Linux 主机主动连到 Cloudflare，再由 Cloudflare 提供 `https://qixiangzhan.online` 对外访问。腾讯云公网 80/443 直连不再作为验收条件。
 
-## 1. 最终拓扑
+## 目标链路
 
-- 设备 -> `EMQX` 公网实例
-- FastAPI 后端 -> `EMQX` TLS
-- Android / Windows 客户端 -> `HTTPS API + WebSocket`
-- MySQL 仅内网或本机可见，不开放 `3306`
-- Navicat 通过 `SSH Tunnel` 管理数据库
+```text
+Qt Desktop / Android / Browser
+        |
+        | HTTPS / WSS
+        v
+Cloudflare
+        |
+        | cloudflared tunnel
+        v
+Jetson / Linux host
+        |
+        v
+FastAPI backend
+```
 
-## 2. 必备环境变量
+正式 API：
+
+```text
+https://qixiangzhan.online/api/v1
+```
+
+实时 WebSocket：
+
+```text
+wss://qixiangzhan.online/api/v1/ws/realtime
+```
+
+## 后端环境变量
 
 生产环境至少配置：
 
 ```text
-QXZ_API_HOST=0.0.0.0
+QXZ_API_HOST=127.0.0.1
 QXZ_API_PORT=8000
-QXZ_PUBLIC_API_BASE=https://api.qixiangzhan.online/api/v1
+QXZ_PUBLIC_API_BASE=https://qixiangzhan.online/api/v1
 QXZ_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4
+QXZ_PROJECT_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/weather?charset=utf8mb4
 QXZ_MQTT_HOST=rc11adc1.ala.cn-hangzhou.emqxsl.cn
 QXZ_MQTT_PORT=8883
 QXZ_MQTT_USERNAME=h743
@@ -31,47 +53,62 @@ QXZ_REFRESH_TOKEN_DAYS=30
 QXZ_JSON_LOGS=true
 ```
 
-## 3. 现在已经支持的公网能力
+## Cloudflare Tunnel 路由
 
-- Access Token + Refresh Token
-- `admin / operator` 角色
-- 设备授权关系
-- `GET /api/v1/auth/me`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `GET/POST/PATCH /api/v1/users*`
-- `WS /api/v1/ws/realtime`
-- `GET /healthz`
+在 Cloudflare Zero Trust 的 Tunnel Public Hostname 中添加：
 
-## 4. 桌面端和安卓端
+```text
+Hostname: qixiangzhan.online
+Service:  http://127.0.0.1:8000
+```
 
-- 桌面端默认建议使用“远程模式”
-- 串口诊断和直连 MQTT 仅保留给 Windows 工程模式
-- Android 不直连 MQTT，只走 API + WebSocket
-- 如果当前 Qt 缺少 `Qt6 WebSockets`，客户端会自动退回到 REST 轮询
+如果需要 `www`：
 
-## 5. 上云后你要改的地方
+```text
+Hostname: www.qixiangzhan.online
+Service:  http://127.0.0.1:8000
+```
 
-- 登录页 `API Base` 改成公网域名，例如：
-  - `https://api.qixiangzhan.online/api/v1`
-- Android 设置页也改为同一公网地址
-- 不再把 MySQL 暴露给公网
-- 不再把 EMQX 用户名密码下发到普通客户端
+如果 Jetson 本机先由 Caddy 转发到 FastAPI，则 Service 改成 Caddy 的本机监听地址。
 
-## 6. 域名与防火墙
+## 客户端配置
 
-- 为 `api.qixiangzhan.online` 添加 `A` 记录，指向云服务器公网 IP
-- 服务器只开放 `80` 和 `443`
-- `3306` 仅允许本机或内网访问，不对公网开放
-- 由 Caddy 自动申请并续期 HTTPS 证书
+Qt 桌面端和 Android App 都使用同一个 API Base：
 
-## 7. 验证顺序
+```text
+https://qixiangzhan.online/api/v1
+```
 
-1. 云主机上 `curl https://api.qixiangzhan.online/healthz`
-2. `POST /api/v1/auth/login`
-3. `GET /api/v1/auth/me`
-4. `WS /api/v1/ws/realtime` 收到 `heartbeat`
-5. Android 4G 网络登录成功
-6. 外网 Windows 电脑登录成功
-7. 下发命令后 `command_messages` 增长
-8. 设备上报后 `telemetry_messages` 增长
+Android 不直接连接 MQTT、MySQL 或串口。桌面端工程模式可以保留串口诊断和本地 MQTT 调试。
+
+## 验收顺序
+
+1. Jetson 本机验证：
+
+```bash
+curl -i http://127.0.0.1:8000/healthz
+```
+
+2. 公网验证：
+
+```bash
+curl -i https://qixiangzhan.online/healthz
+curl -i https://qixiangzhan.online/openapi.json
+```
+
+3. 业务验证：
+
+- `POST /api/v1/auth/login` 登录成功。
+- `GET /api/v1/devices` 返回设备列表。
+- `WS /api/v1/ws/realtime` 能收到实时消息或 heartbeat。
+- Android 4G 网络可登录。
+- 外网 Windows 桌面端可登录。
+- 命令下发后 `command_messages` 增长并收到 ACK。
+- 设备上报后 `telemetry_messages`、`weather_observations`、`weather.project` 持续增长。
+
+## 安全原则
+
+- 不对公网开放 MySQL `3306`。
+- 不把 MQTT 管理账号下发给普通客户端。
+- `.env`、Token secret、证书、keystore 不提交到 Git。
+- Cloudflare Tunnel 可用时，不再依赖云服务器公网 80/443。

@@ -27,7 +27,7 @@ D:\Competition\code_main\qixiangzhan
 - MQTT 密码：`123456`
 - MQTT TLS：`开启`
 - 后端 API（本地联调）：`http://127.0.0.1:8000/api/v1`
-- 后端 API（公网正式环境）：`https://api.qixiangzhan.online/api/v1`
+- 后端 API（公网正式环境）：`https://qixiangzhan.online/api/v1`
 - 后端登录账号：`admin`
 - 后端登录密码：`admin123`
 - 串口波特率：`115200`
@@ -142,7 +142,7 @@ QXZ_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzha
 ```text
 QXZ_API_HOST=0.0.0.0
 QXZ_API_PORT=8000
-QXZ_PUBLIC_API_BASE=https://api.qixiangzhan.online/api/v1
+QXZ_PUBLIC_API_BASE=https://qixiangzhan.online/api/v1
 QXZ_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4
 QXZ_MQTT_HOST=rc11adc1.ala.cn-hangzhou.emqxsl.cn
 QXZ_MQTT_PORT=8883
@@ -536,7 +536,7 @@ Set-Location D:\Competition\code_main\qixiangzhan
 如果要把 release 默认后端改成公网域名，先设置环境变量：
 
 ```powershell
-$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://api.qixiangzhan.online/api/v1"
+$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://qixiangzhan.online/api/v1"
 .\scripts\build_android_apk.cmd -Configuration Release
 ```
 
@@ -567,9 +567,9 @@ D:\Competition\code_main\qixiangzhan\qt-client\build\android-arm64-release\andro
 如果要跨不同局域网，正式方案是：
 
 - 把后端部署到云服务器
-- 域名解析 `api.qixiangzhan.online -> 云服务器公网 IP`
+- 域名解析 `qixiangzhan.online -> 云服务器公网 IP`
 - 用 Caddy 提供 `HTTPS`
-- 桌面端和安卓端都把 `API Base` 设为 `https://api.qixiangzhan.online/api/v1`
+- 桌面端和安卓端都把 `API Base` 设为 `https://qixiangzhan.online/api/v1`
 
 ### 11.4 安卓端使用流程
 
@@ -598,7 +598,7 @@ D:\Competition\code_main\qixiangzhan\qt-client\build\android-arm64-release\andro
 - 点击“退出登录”后，会删除本地保存的 token
 - 如果安全存储不可用，本次登录只保存在内存里，关闭 App 后需要重新登录
 - Android release 默认应该连接公网 API，不建议继续把 `127.0.0.1` 当作正式环境地址
-- 推荐正式环境域名：`https://api.qixiangzhan.online/api/v1`
+- 推荐正式环境域名：`https://qixiangzhan.online/api/v1`
 
 ## 12. 推荐完整联调流程
 
@@ -752,8 +752,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy_desktop_qt.ps1
 如果是正式异地使用：
 
 1. 先把后端部署到云服务器
-2. 配置 `api.qixiangzhan.online`
-3. 让桌面端和安卓端统一连接 `https://api.qixiangzhan.online/api/v1`
+2. 配置 `qixiangzhan.online`
+3. 让桌面端和安卓端统一连接 `https://qixiangzhan.online/api/v1`
 4. Windows 工程模式只保留给现场调试
 
 ## 15. 相关文档
