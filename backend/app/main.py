@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -61,8 +62,10 @@ from .services import (
     apply_runtime_rules,
     create_command_request,
     create_system_event,
+    device_heartbeat_fresh,
     device_alarm_count_subquery,
     device_ids_for_user,
+    effective_device_online,
     replace_user_memberships,
     prune_runtime_history,
     retry_pending_command_requests,
@@ -77,6 +80,383 @@ from .models import DeviceLastState, WeatherObservation
 logger = logging.getLogger(__name__)
 bridge = EmqxBridge()
 APP_STARTED_AT = utcnow()
+
+
+def format_dashboard_time(value: datetime | None) -> str:
+    if value is None:
+        return "No data yet"
+    return value.isoformat(sep=" ", timespec="seconds")
+
+
+def format_uptime(seconds: float) -> str:
+    total_seconds = max(0, int(seconds))
+    days, remainder = divmod(total_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, secs = divmod(remainder, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or parts:
+        parts.append(f"{hours}h")
+    if minutes or parts:
+        parts.append(f"{minutes}m")
+    parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
+def collect_dashboard_summary(db: Session) -> dict[str, object]:
+    now = utcnow()
+    uptime_seconds = max(0.0, (now - APP_STARTED_AT).total_seconds())
+    disk_usage = shutil.disk_usage(os.getcwd())
+    disk_free_percent = (disk_usage.free / disk_usage.total * 100.0) if disk_usage.total else 0.0
+
+    mysql_ok = True
+    device_count = 0
+    online_count = 0
+    latest_seen = None
+    latest_obs = None
+    try:
+        db.execute(text("SELECT 1"))
+        devices = db.scalars(select(Device)).all()
+        device_count = len(devices)
+        online_count = sum(1 for device in devices if effective_device_online(device, now=now))
+        latest_seen = max((device.last_seen_at for device in devices if device.last_seen_at is not None), default=None)
+        latest_obs = db.scalar(select(func.max(WeatherObservation.observed_at)))
+    except Exception as exc:  # pragma: no cover - public dashboard should degrade gracefully
+        mysql_ok = False
+        logger.warning("Dashboard database probe failed: %s", exc)
+
+    project_storage_ok = None
+    try:
+        with ProjectSessionLocal() as project_db:
+            project_db.execute(text("SELECT 1"))
+            project_storage_ok = True
+    except Exception as exc:  # pragma: no cover - optional compatibility store
+        project_storage_ok = False
+        logger.warning("Project compatibility database probe failed: %s", exc)
+
+    status = "ok"
+    if not mysql_ok or not bridge.connected:
+        status = "degraded"
+    if disk_free_percent < 10.0:
+        status = "warning"
+
+    return {
+        "status": status,
+        "time": now,
+        "uptime_seconds": uptime_seconds,
+        "mysql_ok": mysql_ok,
+        "project_storage_ok": project_storage_ok,
+        "mqtt_connected": bridge.connected,
+        "device_count": device_count,
+        "online_count": online_count,
+        "latest_seen": latest_seen,
+        "latest_obs": latest_obs,
+        "disk_free_percent": round(disk_free_percent, 2),
+    }
+
+
+def render_homepage(summary: dict[str, object]) -> str:
+    status = str(summary["status"])
+    status_class = {
+        "ok": "status-ok",
+        "degraded": "status-degraded",
+        "warning": "status-warning",
+    }.get(status, "status-degraded")
+    mysql_label = "Connected" if summary["mysql_ok"] else "Unavailable"
+    mqtt_label = "Connected" if summary["mqtt_connected"] else "Disconnected"
+    project_storage_value = summary["project_storage_ok"]
+    if project_storage_value is True:
+        project_storage_label = "Connected"
+    elif project_storage_value is False:
+        project_storage_label = "Unavailable"
+    else:
+        project_storage_label = "Unknown"
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="30">
+    <title>Qixiangzhan Edge Dashboard</title>
+    <style>
+        :root {{
+            color-scheme: light;
+            --bg: #f4f8fb;
+            --panel: rgba(255, 255, 255, 0.95);
+            --text: #17324d;
+            --muted: #5b7289;
+            --accent: #0c6d90;
+            --ok: #1b8f5a;
+            --degraded: #c77700;
+            --warning: #b03a3a;
+            --border: rgba(23, 50, 77, 0.1);
+            font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+        }}
+        * {{
+            box-sizing: border-box;
+        }}
+        body {{
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(12, 109, 144, 0.12), transparent 30%),
+                linear-gradient(180deg, #edf6fb 0%, var(--bg) 100%);
+            color: var(--text);
+        }}
+        main {{
+            width: min(1120px, calc(100vw - 32px));
+            margin: 0 auto;
+            padding: 32px 0 40px;
+        }}
+        .hero {{
+            padding: 28px;
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(238, 248, 255, 0.94));
+            box-shadow: 0 24px 60px rgba(23, 50, 77, 0.12);
+        }}
+        .eyebrow {{
+            margin: 0 0 12px;
+            color: var(--accent);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }}
+        h1 {{
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.6rem);
+            line-height: 1.05;
+        }}
+        .subtitle {{
+            max-width: 56rem;
+            margin: 16px 0 0;
+            color: var(--muted);
+            font-size: 1.04rem;
+            line-height: 1.7;
+        }}
+        .hero-meta {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 18px;
+        }}
+        .pill {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.78);
+            font-size: 0.95rem;
+        }}
+        .status {{
+            font-weight: 700;
+        }}
+        .status-ok {{
+            color: var(--ok);
+        }}
+        .status-degraded {{
+            color: var(--degraded);
+        }}
+        .status-warning {{
+            color: var(--warning);
+        }}
+        .grid {{
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-top: 22px;
+        }}
+        .panel {{
+            padding: 22px;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            box-shadow: 0 18px 40px rgba(23, 50, 77, 0.08);
+        }}
+        .panel h2 {{
+            margin: 0 0 16px;
+            font-size: 1.2rem;
+        }}
+        .stats {{
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }}
+        .stat {{
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(12, 109, 144, 0.06);
+        }}
+        .stat label {{
+            display: block;
+            color: var(--muted);
+            font-size: 0.88rem;
+        }}
+        .stat strong {{
+            display: block;
+            margin-top: 6px;
+            font-size: 1.15rem;
+            line-height: 1.4;
+        }}
+        .links {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }}
+        .link-card {{
+            display: block;
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.88);
+            color: inherit;
+            text-decoration: none;
+        }}
+        .link-card:hover {{
+            border-color: rgba(12, 109, 144, 0.35);
+            transform: translateY(-1px);
+        }}
+        .link-card strong {{
+            display: block;
+            margin-bottom: 6px;
+            font-size: 1rem;
+        }}
+        .link-card span {{
+            color: var(--muted);
+            font-size: 0.9rem;
+        }}
+        .notes {{
+            margin-top: 18px;
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.7;
+        }}
+        @media (max-width: 860px) {{
+            .grid,
+            .links,
+            .stats {{
+                grid-template-columns: 1fr;
+            }}
+            main {{
+                width: min(100vw - 20px, 1120px);
+                padding-top: 20px;
+            }}
+            .hero,
+            .panel {{
+                padding: 20px;
+                border-radius: 22px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <main>
+        <section class="hero">
+            <p class="eyebrow">Jetson Edge Master</p>
+            <h1>Qixiangzhan Public Service Dashboard</h1>
+            <p class="subtitle">
+                This station runs the on-site FastAPI edge backend for weather telemetry, MQTT bridge,
+                MySQL persistence, WebSocket updates, and Cloudflare Tunnel access.
+            </p>
+            <div class="hero-meta">
+                <span class="pill">Service status: <span class="status {status_class}">{status.upper()}</span></span>
+                <span class="pill">API base: {settings.public_api_base}</span>
+                <span class="pill">Auto refresh: 30s</span>
+            </div>
+        </section>
+
+        <section class="grid">
+            <article class="panel">
+                <h2>Health Summary</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <label>Current time</label>
+                        <strong>{format_dashboard_time(summary["time"])}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>API version</label>
+                        <strong>{app.version}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>MQTT bridge</label>
+                        <strong>{mqtt_label}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>MySQL</label>
+                        <strong>{mysql_label}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Navicat compat store</label>
+                        <strong>{project_storage_label}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Process uptime</label>
+                        <strong>{format_uptime(float(summary["uptime_seconds"]))}</strong>
+                    </div>
+                </div>
+            </article>
+
+            <article class="panel">
+                <h2>Device Summary</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <label>Online devices</label>
+                        <strong>{summary["online_count"]}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Total devices</label>
+                        <strong>{summary["device_count"]}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Latest device update</label>
+                        <strong>{format_dashboard_time(summary["latest_seen"])}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Latest weather observation</label>
+                        <strong>{format_dashboard_time(summary["latest_obs"])}</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Disk free</label>
+                        <strong>{summary["disk_free_percent"]}%</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Bound listen address</label>
+                        <strong>{settings.api_host}:{settings.api_port}</strong>
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <section class="panel">
+            <h2>Public Entry Points</h2>
+            <div class="links">
+                <a class="link-card" href="/docs">
+                    <strong>Interactive Docs</strong>
+                    <span>Swagger UI for the backend API surface.</span>
+                </a>
+                <a class="link-card" href="/openapi.json">
+                    <strong>OpenAPI JSON</strong>
+                    <span>Machine-readable schema for clients and integrations.</span>
+                </a>
+                <a class="link-card" href="/healthz">
+                    <strong>Health Probe</strong>
+                    <span>Lightweight health endpoint for local and tunnel checks.</span>
+                </a>
+            </div>
+            <p class="notes">
+                This page intentionally shows only aggregate service and device information.
+                Login, command publishing, and per-device data remain protected under <code>/api/v1</code>.
+            </p>
+        </section>
+    </main>
+</body>
+</html>
+"""
 
 
 def request_meta(request: Request) -> tuple[str, str]:
@@ -173,6 +553,19 @@ async def lifespan(app: FastAPI):
             except asyncio.TimeoutError:
                 continue
 
+    async def runtime_rules_worker() -> None:
+        while not stop_event.is_set():
+            try:
+                with SessionLocal() as db:
+                    apply_runtime_rules(db)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Runtime rules loop failed: %s", exc)
+
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                continue
+
     with SessionLocal() as db:
         seed_admin_user(db)
         create_system_event(
@@ -203,6 +596,7 @@ async def lifespan(app: FastAPI):
     realtime_hub.attach_loop(asyncio.get_running_loop())
     retry_task = asyncio.create_task(command_retry_worker())
     housekeeping_task = asyncio.create_task(housekeeping_worker())
+    runtime_rules_task = asyncio.create_task(runtime_rules_worker())
 
     try:
         bridge.start()
@@ -213,7 +607,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_event.set()
-        for task in (retry_task, housekeeping_task):
+        for task in (retry_task, housekeeping_task, runtime_rules_task):
             task.cancel()
             try:
                 await task
@@ -239,6 +633,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="qixiangzhan backend", version="0.2.0", lifespan=lifespan)
 
 
+@app.get("/", response_class=HTMLResponse)
+def index(db: Session = Depends(get_db)) -> HTMLResponse:
+    summary = collect_dashboard_summary(db)
+    return HTMLResponse(render_homepage(summary))
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
+
+
 @app.get("/healthz")
 def healthz(db: Session = Depends(get_db)) -> dict[str, object]:
     db.execute(text("SELECT 1"))
@@ -252,39 +657,27 @@ def healthz(db: Session = Depends(get_db)) -> dict[str, object]:
 @app.get("/api/v1/system/health", response_model=SystemHealthResponse)
 def system_health(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> SystemHealthResponse:
     _ = current_user
-    db.execute(text("SELECT 1"))
-
-    device_count = db.scalar(select(func.count(Device.id))) or 0
-    online_count = db.scalar(select(func.count(Device.id)).where(Device.online.is_(True))) or 0
-    latest_seen = db.scalar(select(func.max(Device.last_seen_at)))
-    latest_obs = db.scalar(select(func.max(WeatherObservation.observed_at)))
-    uptime_seconds = max(0.0, (utcnow() - APP_STARTED_AT).total_seconds())
+    apply_runtime_rules(db)
+    summary = collect_dashboard_summary(db)
     disk_usage = shutil.disk_usage(os.getcwd())
-    disk_free_percent = (disk_usage.free / disk_usage.total * 100.0) if disk_usage.total else 0.0
-
-    status = "ok"
-    if not bridge.connected:
-        status = "degraded"
-    if disk_free_percent < 10.0:
-        status = "warning"
 
     return SystemHealthResponse(
-        status=status,
-        time=utcnow(),
-        uptime_seconds=uptime_seconds,
+        status=str(summary["status"]),
+        time=summary["time"],
+        uptime_seconds=float(summary["uptime_seconds"]),
         api={
             "host": settings.api_host,
             "port": settings.api_port,
             "version": app.version,
-            "connected_devices": int(online_count),
-            "total_devices": int(device_count),
+            "connected_devices": int(summary["online_count"]),
+            "total_devices": int(summary["device_count"]),
         },
         mysql={
             "database_url": settings.database_url.rsplit("@", 1)[-1] if "@" in settings.database_url else settings.database_url,
-            "ok": True,
+            "ok": bool(summary["mysql_ok"]),
         },
         mqtt={
-            "connected": bridge.connected,
+            "connected": bool(summary["mqtt_connected"]),
             "host": settings.mqtt_host,
             "port": settings.mqtt_port,
         },
@@ -292,13 +685,13 @@ def system_health(current_user: User = Depends(get_current_user), db: Session = 
             "total": disk_usage.total,
             "used": disk_usage.used,
             "free": disk_usage.free,
-            "free_percent": round(disk_free_percent, 2),
+            "free_percent": float(summary["disk_free_percent"]),
         },
         devices={
-            "last_seen_at": latest_seen,
-            "last_weather_at": latest_obs,
-            "online": int(online_count),
-            "total": int(device_count),
+            "last_seen_at": summary["latest_seen"],
+            "last_weather_at": summary["latest_obs"],
+            "online": int(summary["online_count"]),
+            "total": int(summary["device_count"]),
         },
         retention={
             "days": settings.retention_days,
@@ -524,13 +917,14 @@ def get_device_diagnostics(
         "rssi": device.rssi,
         "operator": device.operator_name,
         "ip": device.ip,
-        "last_status_ok": bool(device.online),
+        "last_status_ok": bool(payload),
         "last_publish_ok": bool(device.last_seen_at is not None),
+        "heartbeat_fresh": device_heartbeat_fresh(device),
     }
 
     return DeviceDiagnosticsResponse(
         device_id=device.device_id,
-        online=device.online,
+        online=effective_device_online(device),
         last_seen_at=device.last_seen_at,
         updated_at=device.updated_at,
         l610=l610,

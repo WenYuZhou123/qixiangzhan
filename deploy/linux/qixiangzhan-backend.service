@@ -1,11 +1,12 @@
 [Unit]
 Description=qixiangzhan FastAPI backend
-After=network.target
+After=network-online.target mysql.service
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+User=qixiangzhan
+Group=qixiangzhan
 WorkingDirectory=/opt/qixiangzhan/backend
 EnvironmentFile=/opt/qixiangzhan/backend/.env
 ExecStartPre=/opt/qixiangzhan/backend/.venv/bin/python -m alembic -c alembic.ini upgrade head

@@ -1,6 +1,6 @@
 # qixiangzhan backend
 
-FastAPI 后端负责用户鉴权、设备状态聚合、MQTT bridge、MySQL 入库、WebSocket 推送、系统健康检查和 Navicat `weather.project` 兼容写入。
+FastAPI 后端负责用户鉴权、设备状态聚合、MQTT bridge、MySQL 入库、WebSocket 推送、系统健康检查，以及 Navicat `weather.project` 兼容写入。
 
 生产 API：
 
@@ -8,7 +8,7 @@ FastAPI 后端负责用户鉴权、设备状态聚合、MQTT bridge、MySQL 入�
 https://qixiangzhan.online/api/v1
 ```
 
-本地健康检查：
+本机健康检查：
 
 ```text
 http://127.0.0.1:8000/healthz
@@ -34,7 +34,7 @@ py -3.14 -m uvicorn app.main:app --reload
 QXZ_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4
 ```
 
-可选 Navicat `weather.project` 兼容库：
+Navicat `weather.project` 兼容库：
 
 ```text
 QXZ_PROJECT_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/weather?charset=utf8mb4
@@ -46,17 +46,26 @@ QXZ_PROJECT_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/we
 QXZ_PUBLIC_API_BASE=https://qixiangzhan.online/api/v1
 ```
 
+Jetson 本机建议监听：
+
+```text
+QXZ_API_HOST=127.0.0.1
+QXZ_API_PORT=8000
+```
+
 ## 数据链路
 
-- 原始 MQTT 报文写入 `telemetry_messages`。
-- 最新设备状态写入 `devices` 和 `device_last_state`。
-- 结构化气象数据写入 `weather_observations`。
-- Navicat 新表格式双写到 `weather.project`，失败时只记录 `system_events`，不影响主链路。
-- 命令下发和 ACK 记录写入 `command_messages`。
-- 设备离线、传感器离线、MQTT/数据库/磁盘异常写入 `alarms` 或 `system_events`。
+- 原始 MQTT 报文写入 `telemetry_messages`
+- 最新设备状态写入 `devices` 和 `device_last_state`
+- 结构化气象数据写入 `weather_observations`
+- Navicat 兼容数据双写到 `weather.project`
+- 命令下发与 ACK 写入 `command_messages`
+- 服务、离线、存储异常写入 `system_events` 和 `alarms`
 
 ## API 摘要
 
+- `GET /`
+- `GET /healthz`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
@@ -73,24 +82,36 @@ QXZ_PUBLIC_API_BASE=https://qixiangzhan.online/api/v1
 - `POST /api/v1/devices/{device_id}/commands`
 - `GET /api/v1/system/health`
 - `WS /api/v1/ws/realtime`
-- `GET /healthz`
 
-除登录、刷新和退出外，`/api/v1/*` 接口都需要：
+除登录、刷新和退出外，`/api/v1/*` 都需要：
 
 ```text
 Authorization: Bearer <access_token>
 ```
 
+## 运行时要点
+
+- 设备在线状态由最近心跳时间和 `offline_seconds` 共同判定
+- 后台定时任务会主动刷新离线状态，不再依赖有人访问 `/devices`
+- diagnostics 中：
+  - 顶层 `online` 表示当前是否在线
+  - `l610.last_status_ok` 表示最近一次状态报文存在且解析成功
+  - `l610.heartbeat_fresh` 表示最近心跳是否仍在离线窗口内
+
 ## 运维验证
 
+公网：
+
 ```powershell
+curl.exe https://qixiangzhan.online/
 curl.exe https://qixiangzhan.online/healthz
 curl.exe https://qixiangzhan.online/openapi.json
 ```
 
-本地验证：
+本机：
 
 ```powershell
+curl.exe http://127.0.0.1:8000/
 curl.exe http://127.0.0.1:8000/healthz
 ```
 
@@ -98,4 +119,4 @@ curl.exe http://127.0.0.1:8000/healthz
 
 - [平台运维手册](../docs/platform_operation_manual_zh.md)
 - [Jetson 现场部署手册](../docs/jetson_edge_master_guide_zh.md)
-- [Navicat/MySQL 配置](../docs/navicat_mysql_setup.md)
+- [Linux/Jetson 部署包](../deploy/linux/README.md)

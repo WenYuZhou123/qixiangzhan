@@ -66,6 +66,20 @@ def naive_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo is not None else value
 
 
+def device_heartbeat_fresh(device: Device, *, now: datetime | None = None) -> bool:
+    if device.last_seen_at is None:
+        return False
+    current_time = now or utcnow()
+    threshold = naive_utc(current_time - timedelta(seconds=settings.offline_seconds))
+    return naive_utc(device.last_seen_at) >= threshold
+
+
+def effective_device_online(device: Device, *, now: datetime | None = None) -> bool:
+    if not device_heartbeat_fresh(device, now=now):
+        return False
+    return bool(device.online)
+
+
 def parse_json_payload(raw_payload: bytes) -> dict[str, Any] | str:
     text = raw_payload.decode("utf-8", errors="ignore").strip()
     try:
@@ -667,7 +681,7 @@ def serialize_device(device: Device, active_alarm_count: int = 0, project: Proje
         "display_name": device.display_name,
         "operator_name": device.operator_name,
         "ip": device.ip,
-        "online": device.online,
+        "online": effective_device_online(device),
         "rssi": device.rssi,
         "relay1": device.relay1,
         "relay2": device.relay2,
@@ -1478,19 +1492,26 @@ def retry_pending_command_requests(
 
 
 def apply_offline_rules(db: Session, *, commit: bool = True) -> None:
-    threshold = naive_utc(utcnow() - timedelta(seconds=settings.offline_seconds))
+    now = utcnow()
+    threshold = naive_utc(now - timedelta(seconds=settings.offline_seconds))
     devices = db.scalars(select(Device)).all()
     changed: set[str] = set()
     for device in devices:
-        if device.last_seen_at is None:
-            continue
-        if naive_utc(device.last_seen_at) < threshold:
-            if device.online:
-                changed.add(device.device_id)
-            device.online = False
-            set_alarm_state(db, device.device_id, "device_offline", "critical", "Device heartbeat timeout", "backend", True)
-        else:
+        was_online = bool(device.online)
+        is_online = effective_device_online(device, now=now)
+        if was_online != is_online:
+            changed.add(device.device_id)
+        device.online = is_online
+        if is_online:
             set_alarm_state(db, device.device_id, "device_offline", "critical", "Device online", "backend", False)
+        else:
+            if device.last_seen_at is None:
+                detail = "Device has not reported yet"
+            elif naive_utc(device.last_seen_at) < threshold:
+                detail = "Device heartbeat timeout"
+            else:
+                detail = "Device reported offline"
+            set_alarm_state(db, device.device_id, "device_offline", "critical", detail, "backend", True)
     if commit:
         db.commit()
         for device_id in changed:

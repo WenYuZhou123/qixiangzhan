@@ -4,10 +4,9 @@
 
 ## 文件
 
-- `qixiangzhan-backend.service`：FastAPI systemd 服务，启动前执行 Alembic 迁移。
-- `backup_mysql.sh`：MySQL 每日备份脚本，默认保留 7 天。
-- `Caddyfile`：本机反向代理样例，可用于 Jetson 本地 HTTP/HTTPS 入口或 tunnel 前置代理。
-- `../../backend/alembic/`：后端数据库版本迁移。
+- `qixiangzhan-backend.service`：FastAPI 的 systemd 服务，启动前执行 Alembic 迁移
+- `backup_mysql.sh`：MySQL 备份脚本
+- `Caddyfile`：本机反向代理样例，适合本地 HTTP/HTTPS 或 tunnel 前置代理
 
 ## 推荐目录
 
@@ -22,11 +21,41 @@
   backups/
 ```
 
-## Jetson 部署步骤
+## Jetson 现网口径
 
-1. 把 `backend/` 和 `deploy/linux/` 放到 `/opt/qixiangzhan/`。
-2. 创建 `/opt/qixiangzhan/backend/.env`，写入 MySQL、MQTT、Token 和公网 API 配置。
-3. 安装 Python、MySQL client、Caddy、cloudflared。
+当前线上验收通过的关键事实：
+
+- systemd 服务名：`qixiangzhan-backend`
+- 监听地址：`127.0.0.1:8000`
+- 对外入口：`https://qixiangzhan.online`
+- `www` 子域也通过 Cloudflare Tunnel 指向同一后端
+- 主库：`qixiangzhan`
+- 兼容库：`weather`
+
+## 环境变量模板
+
+参考 [backend/.env.example](../../backend/.env.example)。
+
+重点值：
+
+```text
+QXZ_API_HOST=127.0.0.1
+QXZ_API_PORT=8000
+QXZ_PUBLIC_API_BASE=https://qixiangzhan.online/api/v1
+QXZ_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/qixiangzhan?charset=utf8mb4
+QXZ_PROJECT_DATABASE_URL=mysql+pymysql://qixiang_app:change-me@127.0.0.1:3306/weather?charset=utf8mb4
+```
+
+注意：
+
+- 仓库只保留脱敏模板
+- Jetson 上真实密码、token、密钥只留在 `/opt/qixiangzhan/backend/.env`
+
+## 部署步骤
+
+1. 把 `backend/` 和 `deploy/linux/` 放到 `/opt/qixiangzhan/`
+2. 创建 `/opt/qixiangzhan/backend/.env`
+3. 安装 Python、MySQL client、`cloudflared`
 4. 执行迁移：
 
 ```bash
@@ -42,36 +71,38 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now qixiangzhan-backend
 ```
 
-6. 配置 Cloudflare Tunnel，把公网主机名转发到本机后端或 Caddy：
+6. 配置 Cloudflare Tunnel：
 
 ```text
 qixiangzhan.online -> http://127.0.0.1:8000
 www.qixiangzhan.online -> http://127.0.0.1:8000
 ```
 
-如果本机使用 Caddy 作为前置代理，则 tunnel service 填 Caddy 监听地址。
-
 ## 健康检查
 
-本机：
+Jetson 本机：
 
 ```bash
+curl -i http://127.0.0.1:8000/
 curl -i http://127.0.0.1:8000/healthz
 ```
 
 公网：
 
 ```bash
+curl -i https://qixiangzhan.online/
 curl -i https://qixiangzhan.online/healthz
 curl -i https://qixiangzhan.online/openapi.json
 ```
 
-系统健康：
+登录后：
 
 ```text
 GET /api/v1/system/health
+GET /api/v1/devices
+GET /api/v1/project/latest
 ```
 
 ## Navicat
 
-不要把 MySQL `3306` 暴露到公网。Navicat 推荐通过 SSH Tunnel 或 Cloudflare 内网访问方案连接 Jetson。
+不要把 MySQL `3306` 直接暴露到公网。Navicat 建议通过 SSH Tunnel 或内网方式连接 Jetson。
