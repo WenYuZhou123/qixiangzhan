@@ -1,11 +1,18 @@
 import asyncio
 import os
 import shutil
+import hmac
+import http.client
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -16,19 +23,32 @@ from .auth import (
     get_current_user,
     get_current_user_from_websocket,
     hash_password,
+    issue_media_credentials,
+    media_ticket_device_id,
+    issue_turn_credentials,
+    media_ticket_user_id,
     issue_refresh_token,
     refresh_session,
     revoke_refresh_token,
     revoke_user_refresh_tokens,
     seed_admin_user,
     utcnow,
+    verify_media_credentials,
 )
 from .database import SessionLocal, get_db
-from .models import Alarm, CommandMessage, Device, DeviceMembership, TelemetryMessage, User
+from .config import settings
+from .ai_service import AIProviderError, analyze_with_provider
+from .models import AIAnalysis, Alarm, CommandMessage, Device, DeviceMembership, ForecastSnapshot, TelemetryMessage, User
 from .mqtt_bridge import EmqxBridge
 from .realtime import realtime_hub
+from .schema_migrations import ensure_runtime_schema
+from .weather_forecast import ForecastProviderError, build_forecast
 from .schemas import (
     AlarmResponse,
+    EdgeAnalyzeRequest,
+    EdgeAnalyzeResponse,
+    EdgeForecastRequest,
+    EdgeForecastResponse,
     CommandCreateRequest,
     CommandCreateResponse,
     CommandResponse,
@@ -40,6 +60,7 @@ from .schemas import (
     LogoutRequest,
     MeResponse,
     ProjectTelemetryResponse,
+    MediaAuthRequest,
     RefreshRequest,
     SessionResponse,
     SystemHealthResponse,
@@ -47,6 +68,7 @@ from .schemas import (
     UserCreateRequest,
     UserResponse,
     UserUpdateRequest,
+    VideoCredentialsResponse,
 )
 from .project_storage import (
     ProjectSessionLocal,
@@ -77,6 +99,8 @@ from .models import DeviceLastState, WeatherObservation
 logger = logging.getLogger(__name__)
 bridge = EmqxBridge()
 APP_STARTED_AT = utcnow()
+edge_analysis_lock = threading.Lock()
+edge_analysis_times: dict[str, float] = {}
 
 
 def request_meta(request: Request) -> tuple[str, str]:
@@ -237,6 +261,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="qixiangzhan backend", version="0.2.0", lifespan=lifespan)
+VIDEO_VIEWER_PATH = Path("/app/viewer/index.html")
 
 
 @app.get("/healthz")
@@ -305,6 +330,122 @@ def system_health(current_user: User = Depends(get_current_user), db: Session = 
             "cleanup_interval_seconds": settings.retention_cleanup_interval_seconds,
         },
     )
+@app.post("/api/v1/edge/ai/analyze", response_model=EdgeAnalyzeResponse)
+def edge_ai_analyze(
+    payload: EdgeAnalyzeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> EdgeAnalyzeResponse:
+    """Accept a signed ESP snapshot and proxy it to the configured cloud model."""
+    edge_key = request.headers.get("X-QXZ-Edge-Key", "")
+    if not settings.edge_device_key:
+        raise HTTPException(status_code=503, detail="Edge AI is not configured")
+    if not hmac.compare_digest(edge_key, settings.edge_device_key):
+        raise HTTPException(status_code=401, detail="Invalid edge key")
+
+    request_data = payload.model_dump(mode="json")
+    analysis = AIAnalysis(
+        device_id=payload.device_id,
+        snapshot_id=payload.snapshot_id,
+        provider="openai-compatible",
+        model=settings.llm_model,
+        status="pending",
+        request_payload=request_data,
+    )
+    db.add(analysis)
+
+    if not payload.fusion.data_valid or payload.fusion.risk_level == "unknown":
+        response = EdgeAnalyzeResponse(
+            analysis_id=0,
+            risk_level="unknown",
+            summary="传感器数据不完整，暂不提供控制建议。",
+            reasons=["风场或降雨传感器离线"],
+            recommended_action="none",
+            requires_confirmation=True,
+        )
+        analysis.status = "blocked"
+        analysis.response_payload = response.model_dump(mode="json")
+        db.commit()
+        db.refresh(analysis)
+        response.analysis_id = analysis.id
+        analysis.response_payload = response.model_dump(mode="json")
+        db.commit()
+        return response
+
+    now = time.monotonic()
+    with edge_analysis_lock:
+        last_request = edge_analysis_times.get(payload.device_id, 0.0)
+        if now - last_request < settings.llm_device_cooldown_seconds:
+            analysis.status = "cooldown"
+            analysis.error_detail = "Device analysis cooldown is active"
+            db.commit()
+            raise HTTPException(status_code=429, detail="AI analysis is cooling down")
+        edge_analysis_times[payload.device_id] = now
+
+    try:
+        provider_result = analyze_with_provider(payload)
+    except AIProviderError as exc:
+        analysis.status = "error"
+        analysis.error_detail = str(exc)
+        db.commit()
+        logger.warning("AI analysis failed for %s: %s", payload.device_id, exc)
+        raise HTTPException(status_code=503, detail="Cloud model analysis is unavailable") from exc
+
+    result = provider_result.result.model_copy(update={"requires_confirmation": True})
+    # Forecast advice is conservative: it can never open a landing pad and
+    # dangerous short-term weather may only ask the operator to close, stop, or query.
+    if payload.forecast is not None and payload.forecast.available:
+        if result.recommended_action == "pad_open":
+            result = result.model_copy(update={"recommended_action": "query_status"})
+        if (payload.forecast.next_three_hour_risk == "danger" and
+                result.recommended_action not in {"pad_close", "pad_stop", "query_status", "none"}):
+            result = result.model_copy(update={"recommended_action": "query_status"})
+    analysis.status = "success"
+    analysis.duration_ms = provider_result.duration_ms
+    analysis.response_payload = result.model_dump(mode="json")
+    db.commit()
+    db.refresh(analysis)
+    return EdgeAnalyzeResponse(analysis_id=analysis.id, **result.model_dump())
+
+
+@app.post("/api/v1/edge/weather/forecast", response_model=EdgeForecastResponse)
+def edge_weather_forecast(
+    payload: EdgeForecastRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> EdgeForecastResponse:
+    """Return cached Open-Meteo hourly data with conservative local correction."""
+    forecast_key = request.headers.get("X-QXZ-Forecast-Key", "")
+    if not settings.forecast_edge_key:
+        raise HTTPException(status_code=503, detail="Forecast service is not configured")
+    if not hmac.compare_digest(forecast_key, settings.forecast_edge_key):
+        raise HTTPException(status_code=401, detail="Invalid forecast key")
+
+    request_data = payload.model_dump(mode="json")
+    snapshot = ForecastSnapshot(
+        device_id=payload.device_id,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        timezone=payload.timezone,
+        request_payload=request_data,
+        response_payload={},
+        status="pending",
+    )
+    db.add(snapshot)
+    try:
+        result = build_forecast(payload)
+    except ForecastProviderError as exc:
+        snapshot.status = "error"
+        snapshot.error_detail = str(exc)
+        db.commit()
+        logger.warning("Forecast request failed for %s: %s", payload.device_id, exc)
+        raise HTTPException(status_code=503, detail="Forecast provider is unavailable") from exc
+
+    snapshot.status = "success"
+    snapshot.response_payload = result.model_dump(mode="json")
+    snapshot.expires_at = result.expires_at
+    db.commit()
+    return result
 
 
 @app.post("/api/v1/auth/login", response_model=SessionResponse)
@@ -422,6 +563,119 @@ def get_device(device_id: str, current_user: User = Depends(get_current_user), d
     return DeviceResponse.model_validate(
         serialize_device(device, int(alarm_count), project=latest_project.get(device.device_id))
     )
+
+
+@app.get("/video/viewer.html", include_in_schema=False)
+def video_viewer() -> FileResponse:
+    if not VIDEO_VIEWER_PATH.is_file():
+        raise HTTPException(status_code=503, detail="Video viewer is unavailable")
+    return FileResponse(VIDEO_VIEWER_PATH, media_type="text/html", headers={"Cache-Control": "no-store"})
+
+
+def forward_whep_request(
+    method: str,
+    upstream_path: str,
+    body: bytes,
+    request_headers: dict[str, str],
+) -> tuple[int, bytes, dict[str, str]]:
+    connection = http.client.HTTPConnection("qixiangzhan-video-mediamtx", 8889, timeout=15)
+    try:
+        connection.request(method, upstream_path, body=body, headers=request_headers)
+        upstream = connection.getresponse()
+        response_headers: dict[str, str] = {}
+        for name in ("Content-Type", "Location"):
+            value = upstream.getheader(name)
+            if value:
+                response_headers[name] = value
+        return upstream.status, upstream.read(), response_headers
+    finally:
+        connection.close()
+
+
+@app.api_route("/video/drone-01/whep{session_path:path}", methods=["POST", "DELETE"], include_in_schema=False)
+async def video_whep_proxy(session_path: str, request: Request) -> Response:
+    """Forward WHEP signaling while WebRTC media stays on MediaMTX/TURN."""
+    upstream_path = f"/drone-01/whep{session_path}"
+    request_headers = {"Content-Type": request.headers.get("content-type", "application/sdp")}
+    if authorization := request.headers.get("authorization"):
+        request_headers["Authorization"] = authorization
+
+    try:
+        status, body, response_headers = await asyncio.to_thread(
+            forward_whep_request,
+            request.method,
+            upstream_path,
+            await request.body(),
+            request_headers,
+        )
+        if location := response_headers.get("Location"):
+            parts = urlsplit(location)
+            response_headers["Location"] = urlunsplit(("", "", f"/video{parts.path}", parts.query, ""))
+        return Response(content=body, status_code=status, headers=response_headers)
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="Video signaling is unavailable") from exc
+
+
+@app.post("/api/v1/devices/{device_id}/video/credentials", response_model=VideoCredentialsResponse)
+def create_video_credentials(
+    device_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> VideoCredentialsResponse:
+    ensure_device_access(db, current_user, device_id)
+    stream_path = settings.video_stream_path.strip()
+    if not stream_path:
+        raise HTTPException(status_code=503, detail="Video stream path is not configured")
+    username, password, expires_at = issue_media_credentials(current_user, device_id, stream_path)
+    turn_username, turn_password = issue_turn_credentials(current_user)
+    remote_addr, user_agent = request_meta(request)
+    write_audit_log(
+        db,
+        user=current_user,
+        event_type="video.credentials.issue",
+        message="Issued short-lived video playback credentials",
+        device_id=device_id,
+        payload={"expires_at": expires_at.isoformat()},
+        remote_addr=remote_addr,
+        user_agent=user_agent,
+    )
+    db.commit()
+    return VideoCredentialsResponse(
+        device_id=device_id,
+        whep_url=f"{settings.video_public_base.rstrip('/')}/{stream_path}/whep",
+        username=username,
+        password=password,
+        expires_at=expires_at,
+        turn_url=settings.turn_url,
+        turn_username=turn_username,
+        turn_password=turn_password,
+    )
+
+
+@app.post("/internal/media-auth")
+def media_auth(payload: MediaAuthRequest, db: Session = Depends(get_db)) -> dict[str, bool]:
+    # MediaMTX calls this endpoint from the private Docker network for every reader.
+    viewer_user_id = media_ticket_user_id(payload.user, payload.path)
+    viewer_device_id = media_ticket_device_id(payload.user, payload.path)
+    viewer_user = db.get(User, viewer_user_id) if viewer_user_id is not None else None
+    allowed = (
+        payload.action == "read"
+        and bool(payload.path)
+        and verify_media_credentials(payload.user, payload.password, payload.path)
+        and viewer_user is not None
+        and viewer_user.is_active
+        and viewer_device_id is not None
+        and user_can_access_device(db, viewer_user, viewer_device_id)
+    ) or (
+        payload.action == "publish"
+        and payload.path == "drone-01"
+        and payload.user == settings.media_publish_username
+        and payload.password == settings.media_publish_password
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Media authorization denied")
+    return {"ok": True}
 
 
 @app.get("/api/v1/devices/{device_id}/history", response_model=list[HistoryResponse])

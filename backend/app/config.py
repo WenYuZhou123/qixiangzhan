@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     admin_display_name: str = "Platform Admin"
     token_secret: str = "qixiangzhan-dev-secret"
     token_issuer: str = "qixiangzhan-backend"
+    video_public_base: str = "https://api.qixiangzhan.online/video"
+    video_stream_path: str = "drone-01"
+    media_auth_secret: str = "qixiangzhan-media-dev-secret"
+    media_ticket_seconds: int = 60
+    media_publish_username: str = "jetson-publisher"
+    media_publish_password: str = "replace-with-a-strong-publisher-password"
+    turn_url: str = "turn:video.qixiangzhan.online:3478?transport=udp"
+    turn_auth_secret: str = "qixiangzhan-turn-dev-secret"
     access_token_minutes: int = 15
     refresh_token_days: int = 30
     offline_seconds: int = 90
@@ -25,6 +33,15 @@ class Settings(BaseSettings):
     retention_days: int = 90
     retention_cleanup_interval_seconds: int = 3600
     ws_heartbeat_seconds: int = 20
+    edge_device_key: str = ""
+    llm_api_base_url: str = ""
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_timeout_seconds: int = 20
+    llm_device_cooldown_seconds: int = 20
+    forecast_edge_key: str = ""
+    forecast_cache_seconds: int = 1800
+    forecast_timeout_seconds: int = 12
     json_logs: bool = False
 
     model_config = SettingsConfigDict(env_prefix="QXZ_", env_file=".env", extra="ignore")

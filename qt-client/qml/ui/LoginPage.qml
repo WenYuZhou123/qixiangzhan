@@ -300,7 +300,9 @@ ScrollView {
 
                     Label {
                         width: parent.width
-                        text: "桌面端和安卓端可直接使用 Cloudflare Tunnel 公网 API。"
+                        text: mobile
+                              ? "移动端默认连接公网 API；本机联调时可改为局域网地址。"
+                              : "桌面本机可直接使用 127.0.0.1；公网访问请使用部署的 HTTPS API。"
                         wrapMode: Text.Wrap
                         color: theme.textMuted
                         font.pixelSize: theme.bodySize(mobile)
@@ -342,7 +344,7 @@ ScrollView {
                         id: passwordField
                         Layout.fillWidth: true
                         echoMode: TextInput.Password
-                        text: "admin123"
+                        text: "123456"
                         placeholderText: "请输入密码"
                         font.pixelSize: mobile ? 18 : 15
                         onAccepted: root.controller.authSession.login(usernameField.text, passwordField.text)

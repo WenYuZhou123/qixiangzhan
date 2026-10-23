@@ -2,7 +2,8 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
     [string]$ApiBase = "",
-    [string]$BuildDirName = ""
+    [string]$BuildDirName = "",
+    [string]$QtAndroidRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +23,7 @@ function Get-DefaultApiBase {
     }
 
     if ($Config -eq "Release") {
-        return "https://api.example.com/api/v1"
+        return "https://api.qixiangzhan.online/api/v1"
     }
 
     return "http://127.0.0.1:8000/api/v1"
@@ -82,7 +83,13 @@ $buildDirName = if (-not [string]::IsNullOrWhiteSpace($BuildDirName)) {
 }
 $buildDir = Join-Path $sourceDir ("build\" + $buildDirName)
 $qtHost = "D:\Qt\6.7.3\mingw_64"
-$qtAndroid = "D:\Qt\6.7.3\android_arm64_v8a"
+$qtAndroid = if (-not [string]::IsNullOrWhiteSpace($QtAndroidRoot)) {
+    $QtAndroidRoot.Trim()
+} elseif (-not [string]::IsNullOrWhiteSpace($env:QXZ_QT_ANDROID_ROOT)) {
+    $env:QXZ_QT_ANDROID_ROOT.Trim()
+} else {
+    "D:\Qt\6.7.3\android_arm64_v8a"
+}
 $sdkRoot = "C:\Users\Lenovo\AppData\Local\Android\Sdk"
 $ndkRoot = Join-Path $sdkRoot "ndk\26.1.10909125"
 $qtCmake = Join-Path $qtHost "bin\qt-cmake.bat"
@@ -103,6 +110,11 @@ if (-not (Test-Path $qtCmake)) {
 
 if (-not (Test-Path $androidDeployQt)) {
     throw "androiddeployqt.exe not found: $androidDeployQt"
+}
+
+$qtWebViewConfig = Join-Path $qtAndroid "lib\cmake\Qt6WebView\Qt6WebViewConfig.cmake"
+if (-not (Test-Path $qtWebViewConfig)) {
+    throw "Qt WebView for Android is required by the video page. Install the Qt 6.7.3 Android arm64-v8a WebView component, then rerun this script. Missing: $qtWebViewConfig"
 }
 
 if ($Configuration -eq "Release") {
@@ -129,8 +141,14 @@ $configureArgs = @(
 )
 
 & $qtCmake @configureArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "CMake configuration failed with exit code $LASTEXITCODE"
+}
 
 cmake --build $buildDir --target relay_qt_client --parallel 4
+if ($LASTEXITCODE -ne 0) {
+    throw "Android CMake build failed with exit code $LASTEXITCODE"
+}
 
 if (-not (Test-Path $soPath)) {
     throw "Android shared library was not produced: $soPath"
@@ -159,6 +177,9 @@ if ($Configuration -eq "Release") {
 }
 
 & $androidDeployQt @deployArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "androiddeployqt failed with exit code $LASTEXITCODE"
+}
 
 $apkFolder = Join-Path $androidBuildDir ("build\outputs\apk\" + $Configuration.ToLower())
 if (-not (Test-Path $apkFolder)) {
@@ -178,6 +199,9 @@ if ($Configuration -eq "Release") {
     }
 
     & $apksigner verify --verbose $finalApk
+    if ($LASTEXITCODE -ne 0) {
+        throw "APK signature verification failed with exit code $LASTEXITCODE"
+    }
 }
 
 Write-Host ""

@@ -22,6 +22,7 @@ ApplicationWindow {
     property var navItems: [
         { key: "overview", label: "概览", badge: "OV" },
         { key: "pad", label: "控制", badge: "CT" },
+        { key: "video", label: "图传", badge: "VD" },
         { key: "weather", label: "气象", badge: "WX" },
         { key: "history", label: "历史", badge: "HS" },
         { key: "alarms", label: "告警", badge: "AL" },
@@ -35,6 +36,7 @@ ApplicationWindow {
     property var mobileNavItems: [
         { key: "overview", label: "概览", badge: "OV" },
         { key: "pad", label: "控制", badge: "CT" },
+        { key: "video", label: "图传", badge: "VD" },
         { key: "weather", label: "气象", badge: "WX" },
         { key: "alarms", label: "告警", badge: "AL" },
         { key: "more", label: "更多", badge: "MO" }
@@ -42,6 +44,7 @@ ApplicationWindow {
     property var mobileNavItemsLoggedOut: [
         { key: "login", label: "登录", badge: "AU" },
         { key: "overview", label: "概览", badge: "OV" },
+        { key: "video", label: "图传", badge: "VD" },
         { key: "weather", label: "气象", badge: "WX" },
         { key: "settings", label: "设置", badge: "CF" },
         { key: "more", label: "更多", badge: "MO" }
@@ -49,18 +52,32 @@ ApplicationWindow {
 
     function pageIndex() {
         switch (currentPage) {
-        case "overview": return 0
-        case "pad": return 1
-        case "weather": return 2
-        case "history": return 3
-        case "alarms": return 4
-        case "settings": return 5
-        case "users": return 6
-        case "engineering": return 7
-        case "serial": return 8
-        case "logs": return 9
-        case "login": return 10
-        default: return 0
+        case "overview":
+            return 0
+        case "pad":
+            return 1
+        case "video":
+            return 2
+        case "weather":
+            return 3
+        case "history":
+            return 4
+        case "alarms":
+            return 5
+        case "settings":
+            return 6
+        case "users":
+            return 7
+        case "engineering":
+            return 8
+        case "serial":
+            return 9
+        case "logs":
+            return 10
+        case "login":
+            return 11
+        default:
+            return 0
         }
     }
 
@@ -448,6 +465,7 @@ ApplicationWindow {
 
                 DeviceOverviewPage { controller: appController }
                 ControlPage { controller: appController }
+                VideoPage { controller: appController }
                 WeatherPage { controller: appController }
                 CommandHistoryPage { controller: appController }
                 AlarmCenterPage { controller: appController }

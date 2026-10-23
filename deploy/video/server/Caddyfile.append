@@ -1,0 +1,14 @@
+
+video.qixiangzhan.online {
+    encode zstd gzip
+
+    handle_path /viewer.html {
+        reverse_proxy qixiangzhan-video-viewer:80
+    }
+
+    handle /drone-01/whep* {
+        reverse_proxy qixiangzhan-video-mediamtx:8889
+    }
+
+    respond "Not found" 404
+}

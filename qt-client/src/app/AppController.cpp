@@ -47,6 +47,7 @@ AppController::AppController(QObject *parent)
                                                 m_realtimeGateway,
                                                 this);
     m_userAdminService = new UserAdminService(m_apiClient, m_authSession, this);
+    m_videoStreamService = new VideoStreamService(m_apiClient, this);
 
     const QVector<DeviceState> cachedStates = m_cache->loadDeviceStates();
     m_stateStore->hydrateStates(cachedStates);
@@ -136,6 +137,11 @@ RemoteSyncService *AppController::remoteSyncService() const
 UserAdminService *AppController::userAdminService() const
 {
     return m_userAdminService;
+}
+
+VideoStreamService *AppController::videoStreamService() const
+{
+    return m_videoStreamService;
 }
 
 QString AppController::localDatabasePath() const

@@ -243,3 +243,40 @@ class AuditLog(Base):
     message: Mapped[str] = mapped_column(Text, default="")
     payload: Mapped[dict | str] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+
+class ForecastSnapshot(Base):
+    __tablename__ = "forecast_snapshots"
+    __table_args__ = (
+        Index("ix_forecast_snapshots_device_created", "device_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(String(128), index=True)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    timezone: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(32), default="open-meteo")
+    status: Mapped[str] = mapped_column(String(24), default="success")
+    request_payload: Mapped[dict] = mapped_column(JSON)
+    response_payload: Mapped[dict] = mapped_column(JSON)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+
+class AIAnalysis(Base):
+    __tablename__ = "ai_analyses"
+    __table_args__ = (Index("ix_ai_analyses_device_created_at", "device_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(String(128), index=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, default=0)
+    provider: Mapped[str] = mapped_column(String(128), default="openai-compatible")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    request_payload: Mapped[dict] = mapped_column(JSON)
+    response_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_detail: Mapped[str] = mapped_column(Text, default="")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)

@@ -7,3 +7,4 @@ cryptography==45.0.7
 PyJWT==2.10.1
 pydantic-settings==2.10.1
 paho-mqtt==2.1.0
+httpx==0.28.1

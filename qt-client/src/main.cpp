@@ -5,6 +5,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlError>
+#include <QtWebView/QtWebView>
 
 #include "app/AppController.h"
 
@@ -45,6 +46,7 @@ static void appendStartupMessage(const QString &message)
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    QtWebView::initialize();
     QCoreApplication::setOrganizationName(QStringLiteral("qixiangzhan"));
     QCoreApplication::setApplicationName(QStringLiteral("qixiang_platform"));
 

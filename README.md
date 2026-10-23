@@ -162,3 +162,59 @@ $env:QXZ_CLIENT_DEFAULT_API_BASE = "https://qixiangzhan.online/api/v1"
 - 本地数据库、日志、临时文件。
 
 本仓库保留 STM32CubeMX/Keil 的原始目录布局。除非同步更新工具链配置，不要移动 `Core/`、`Drivers/`、`MDK-ARM/` 或 `qixiangzhan.ioc`。
+- 固件源码与头文件
+- `backend/` 后端源码
+- `qt-client/` 客户端源码
+- `docs/`
+- `deploy/linux/`
+- `scripts/`
+- Keil 工程定义文件：`*.uvprojx`、`*.sct`、`RTE_Components.h`、`*.dbgconf`
+
+不建议提交：
+
+- Python 虚拟环境
+- Qt / Android 构建目录
+- Keil 中间产物与输出文件：`.crf`、`.d`、`.dep`、`.map`、`.htm`、`.hex`、`.lnp`
+- 本机 Keil 配置文件：`MDK-ARM/qixiangzhan.uvoptx`
+- 本地数据库、日志、缓存
+- keystore、签名文件、`.env`
+- 临时 PDF、调试草稿和本地手册文件
+
+行尾与文本文件约定：
+
+- 源码、文档和普通配置文本默认使用 LF
+- Windows 启动脚本与 PowerShell 脚本保留 CRLF
+- 重新打开 Keil 工程后，如果只出现 `uvoptx`、`map`、`hex`、构建日志等变化，默认不要提交
+
+## Qt 客户端启动脚本
+
+以下脚本按当前本机目录约定编写，直接在 PowerShell 中执行即可。
+
+### 启动 Qt 桌面端
+
+```powershell
+Set-Location D:\Competition\code_main\qixiangzhan
+$exe = "D:\Competition\code_main\qixiangzhan\qt-client\build\desktop-mingw\relay_qt_client.exe"
+Get-Process relay_qt_client -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Process -FilePath $exe
+```
+
+### 使用雷电模拟器启动 Android App
+
+```powershell
+Set-Location D:\Competition\code_main\qixiangzhan
+$ldAdb = "D:\leidian\LDPlayer9\adb.exe"
+$activity = "com.qixiangzhan.platform/org.qtproject.qt.android.bindings.QtActivity"
+& $ldAdb devices
+& $ldAdb -s emulator-5554 shell am start -W -n $activity
+```
+
+### 重新安装当前 APK 到雷电模拟器
+
+```powershell
+Set-Location D:\Competition\code_main\qixiangzhan
+$ldAdb = "D:\leidian\LDPlayer9\adb.exe"
+$apk = "D:\Competition\code_main\qixiangzhan\qixiangzhan-android-debug.apk"
+& $ldAdb -s emulator-5554 install -r $apk
+& $ldAdb -s emulator-5554 shell am start -W -n com.qixiangzhan.platform/org.qtproject.qt.android.bindings.QtActivity
+```

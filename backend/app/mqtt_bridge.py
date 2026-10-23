@@ -36,7 +36,7 @@ class EmqxBridge:
 
     def start(self) -> None:
         logger.info("Starting MQTT bridge -> %s:%s tls=%s", settings.mqtt_host, settings.mqtt_port, settings.mqtt_use_tls)
-        self._client.connect(settings.mqtt_host, settings.mqtt_port, settings.mqtt_keepalive)
+        self._client.connect_async(settings.mqtt_host, settings.mqtt_port, settings.mqtt_keepalive)
         self._client.loop_start()
 
     def stop(self) -> None:
@@ -45,12 +45,8 @@ class EmqxBridge:
 
     def publish(self, topic: str, payload: bytes | str, qos: int = 1, retain: bool = False) -> tuple[bool, str]:
         if not self.connected:
-            logger.warning("MQTT bridge publish while disconnected, attempting reconnect")
-            try:
-                self._client.reconnect()
-            except Exception as exc:  # pragma: no cover
-                logger.warning("MQTT reconnect failed: %s", exc)
-                return False, str(exc)
+            logger.warning("MQTT bridge publish while disconnected")
+            return False, "MQTT bridge disconnected"
 
         message = payload.encode("utf-8") if isinstance(payload, str) else payload
         info = self._client.publish(topic, message, qos=qos, retain=retain)
@@ -86,7 +82,6 @@ class EmqxBridge:
         except Exception:  # pragma: no cover
             logger.exception("MQTT bridge failed to record connect event")
         topics = [
-            "device/+/down/cmd",
             "device/+/up/status",
             "device/+/up/ack",
             "device/+/up/event",

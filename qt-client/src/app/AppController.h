@@ -11,6 +11,7 @@
 #include "data/RemoteSyncService.h"
 #include "data/SQLiteCache.h"
 #include "data/UserAdminService.h"
+#include "data/VideoStreamService.h"
 #include "domain/CommandTracker.h"
 #include "domain/DeviceStateStore.h"
 #include "realtime/RealtimeGateway.h"
@@ -27,6 +28,7 @@ class AppController : public QObject
     Q_PROPERTY(SerialConsoleService *serialConsoleService READ serialConsoleService CONSTANT)
     Q_PROPERTY(RemoteSyncService *remoteSyncService READ remoteSyncService CONSTANT)
     Q_PROPERTY(UserAdminService *userAdminService READ userAdminService CONSTANT)
+    Q_PROPERTY(VideoStreamService *videoStreamService READ videoStreamService CONSTANT)
     Q_PROPERTY(QString localDatabasePath READ localDatabasePath CONSTANT)
     Q_PROPERTY(bool androidMode READ androidMode WRITE setAndroidMode NOTIFY androidModeChanged)
     Q_PROPERTY(bool engineeringMode READ engineeringMode WRITE setEngineeringMode NOTIFY engineeringModeChanged)
@@ -49,6 +51,7 @@ public:
     SerialConsoleService *serialConsoleService() const;
     RemoteSyncService *remoteSyncService() const;
     UserAdminService *userAdminService() const;
+    VideoStreamService *videoStreamService() const;
     QString localDatabasePath() const;
     bool androidMode() const;
     void setAndroidMode(bool androidMode);
@@ -98,6 +101,7 @@ private:
     RealtimeGateway *m_realtimeGateway = nullptr;
     RemoteSyncService *m_remoteSyncService = nullptr;
     UserAdminService *m_userAdminService = nullptr;
+    VideoStreamService *m_videoStreamService = nullptr;
     bool m_androidMode = false;
     bool m_engineeringMode = false;
     QString m_currentPage = QStringLiteral("overview");

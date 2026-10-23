@@ -1,0 +1,223 @@
+menu "Example Configuration"
+
+    menu "Display"
+        config EXAMPLE_LCD_RGB_BOUNCE_BUFFER_HEIGHT
+            int "RGB Bounce buffer height"
+            default 10
+            help
+                Height of bounce buffer. The width of the buffer is the same as that of the LCD.
+
+        config EXAMPLE_LVGL_PORT_TASK_MAX_DELAY_MS
+            int "LVGL timer task maximum delay (ms)"
+            default 500
+            range 2 2000  # Example range, adjust as needed
+            help
+            The maximum delay of the LVGL timer task, in milliseconds.
+
+        config EXAMPLE_LVGL_PORT_TASK_MIN_DELAY_MS
+            int "LVGL timer task minimum delay (ms)"
+            default 10
+            range 1 100  # Example range, adjust as needed
+            help
+            The minimum delay of the LVGL timer task, in milliseconds.
+
+        config EXAMPLE_LVGL_PORT_TASK_PRIORITY
+            int "LVGL task priority"
+            default 2
+            help
+                The Board Support Package will create a task that will periodically handle LVGL operation in lv_timer_handler().
+
+        config EXAMPLE_LVGL_PORT_TASK_STACK_SIZE_KB
+            int "LVGL task stack size (KB)"
+            default 10
+            help
+                Size(KB) of LVGL task stack.
+
+        config EXAMPLE_LVGL_PORT_TASK_CORE
+            int "LVGL timer task core"
+            default -1
+            range -1 1
+            help
+            The core of the LVGL timer task.
+            Set to -1 to not specify the core.
+            Set to 1 only if the SoCs support dual-core, otherwise set to -1 or 0.
+
+        config EXAMPLE_LVGL_PORT_TICK
+            int "LVGL tick period"
+            default 2
+            range 1 100
+            help
+                Period of LVGL tick timer.
+
+        config EXAMPLE_LVGL_PORT_AVOID_TEAR_ENABLE
+            bool "Avoid tearing effect"
+            default "n"
+            help
+                Avoid tearing effect through LVGL buffer mode and double frame buffers of RGB LCD. This feature is only available for RGB LCD.
+
+        choice
+            depends on EXAMPLE_LVGL_PORT_AVOID_TEAR_ENABLE
+            prompt "Select Avoid Tearing Mode"
+            default EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_3
+            config EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_1
+                bool "Mode1: LCD double-buffer & LVGL full-refresh"
+            config EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_2
+                bool "Mode2: LCD triple-buffer & LVGL full-refresh"
+            config EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_3
+                bool "Mode3: LCD double-buffer & LVGL direct-mode"
+            help
+                The current tearing prevention mode supports both full refresh mode and direct mode. Tearing prevention mode may consume more PSRAM space
+        endchoice
+
+        config EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE
+            depends on EXAMPLE_LVGL_PORT_AVOID_TEAR_ENABLE
+            int
+            default 1 if EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_1
+            default 2 if EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_2
+            default 3 if EXAMPLE_LVGL_PORT_AVOID_TEAR_MODE_3
+
+        choice
+            depends on EXAMPLE_LVGL_PORT_AVOID_TEAR_ENABLE
+            prompt "Select rotation"
+            default EXAMPLE_LVGL_PORT_ROTATION_0
+            config EXAMPLE_LVGL_PORT_ROTATION_0
+                bool "Rotation 0"
+            config EXAMPLE_LVGL_PORT_ROTATION_90
+                bool "Rotation 90"
+            config EXAMPLE_LVGL_PORT_ROTATION_180
+                bool "Rotation 180"
+            config EXAMPLE_LVGL_PORT_ROTATION_270
+                bool "Rotation 270"
+        endchoice
+
+        config EXAMPLE_LVGL_PORT_ROTATION_DEGREE
+            int
+            default 0 if EXAMPLE_LVGL_PORT_ROTATION_0
+            default 90 if EXAMPLE_LVGL_PORT_ROTATION_90
+            default 180 if EXAMPLE_LVGL_PORT_ROTATION_180
+            default 270 if EXAMPLE_LVGL_PORT_ROTATION_270
+
+        choice
+            depends on !EXAMPLE_LVGL_PORT_AVOID_TEAR_ENABLE
+            prompt "Select LVGL buffer memory capability"
+            default EXAMPLE_LVGL_PORT_BUF_INTERNAL
+            config EXAMPLE_LVGL_PORT_BUF_PSRAM
+                bool "PSRAM memory"
+            config EXAMPLE_LVGL_PORT_BUF_INTERNAL
+                bool "Internal memory"
+        endchoice
+
+        config EXAMPLE_LVGL_PORT_BUF_HEIGHT
+            depends on !EXAMPLE_LVGL_PORT_AVOID_TEAR_ENABLE
+            int "LVGL buffer height"
+            default 100
+            help
+                Height of LVGL buffer. The width of the buffer is the same as that of the LCD.
+    endmenu
+endmenu
+
+menu "Cloud AI"
+    config PANEL_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+
+    config PANEL_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+
+    config PANEL_EDGE_API_URL
+        string "AI HTTPS URL"
+        default ""
+        help
+            Backend endpoint or an OpenAI-compatible /chat/completions endpoint.
+
+    config PANEL_EDGE_DEVICE_ID
+        string "Edge device ID"
+        default "relay_h743_001"
+
+    config PANEL_EDGE_KEY
+        string "AI API key"
+        default ""
+
+    config PANEL_LLM_MODEL
+        string "Direct model name"
+        default "qwen3.7-plus"
+        help
+            Used only when the HTTPS URL ends with /chat/completions.
+
+    config PANEL_ADMIN_PIN
+        string "Initial administrator PIN"
+        default "123456"
+        help
+            Used only until the local settings page saves a replacement PIN in NVS.
+
+    config PANEL_AI_AUTO_INTERVAL_SECONDS
+        int "Automatic AI analysis interval in seconds"
+        default 60
+        range 30 3600
+
+    config PANEL_AI_HTTP_TIMEOUT_MS
+        int "AI HTTPS timeout in milliseconds"
+        default 30000
+        range 3000 60000
+
+    config PANEL_FORECAST_API_URL
+        string "Forecast service HTTPS URL"
+        default ""
+
+    config PANEL_FORECAST_KEY
+        string "Forecast service Edge key"
+        default ""
+
+    config PANEL_FORECAST_LOCATION_NAME
+        string "Forecast location name"
+        default ""
+
+    config PANEL_FORECAST_LATITUDE
+        string "Forecast latitude"
+        default ""
+
+    config PANEL_FORECAST_LONGITUDE
+        string "Forecast longitude"
+        default ""
+
+    config PANEL_FORECAST_TIMEZONE
+        string "Forecast IANA timezone"
+        default "Asia/Shanghai"
+
+    config PANEL_FORECAST_REFRESH_SECONDS
+        int "Forecast refresh interval in seconds"
+        default 1800
+        range 300 7200
+endmenu
+
+menu "Panel Link"
+    config PANEL_RS485_UART_NUM
+        int "RS485 UART port"
+        default 1
+        range 0 2
+
+    config PANEL_RS485_TX_GPIO
+        int "RS485 transmit GPIO"
+        default 16
+
+    config PANEL_RS485_RX_GPIO
+        int "RS485 receive GPIO"
+        default 15
+
+    config PANEL_RS485_BAUD_RATE
+        int "RS485 baud rate"
+        default 4800
+
+    config PANEL_RS485_RX_BUFFER_SIZE
+        int "RS485 receive buffer size"
+        default 512
+
+    config PANEL_RS485_TX_BUFFER_SIZE
+        int "RS485 transmit buffer size"
+        default 256
+
+    config PANEL_LINK_OFFLINE_TIMEOUT_MS
+        int "H743 offline timeout in milliseconds"
+        default 3000
+endmenu

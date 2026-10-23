@@ -74,8 +74,12 @@ QXZ_PUBLIC_API_BASE=https://qixiangzhan.online/api/v1
 - `GET /api/v1/system/health`
 - `WS /api/v1/ws/realtime`
 - `GET /healthz`
+- `POST /api/v1/edge/ai/analyze` (ESP32 edge key only)
 
 除登录、刷新和退出外，`/api/v1/*` 接口都需要：
+All `/api/v1/*` endpoints except login/refresh/logout require `Authorization: Bearer <token>`.
+The AI edge endpoint instead requires `X-QXZ-Edge-Key`; configure the `QXZ_EDGE_DEVICE_KEY`
+and OpenAI-compatible `QXZ_LLM_*` variables before enabling it on the ESP32.
 
 ```text
 Authorization: Bearer <access_token>

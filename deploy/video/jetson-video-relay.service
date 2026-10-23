@@ -1,0 +1,17 @@
+[Unit]
+Description=ROS H.264 video relay to MediaMTX
+After=network-online.target ros-master.service ros-usb-camera.service
+Requires=ros-usb-camera.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jit
+EnvironmentFile=/etc/qixiangzhan/video-relay.env
+Environment=LD_PRELOAD=/lib/aarch64-linux-gnu/libgomp.so.1
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/jit/drone_ws/devel/setup.bash && rosrun bench_uav_validation ros_h264_rtsp_relay.py'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

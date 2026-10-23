@@ -1,0 +1,3 @@
+user l610_relay_001
+topic read device/relay_h743_001/down/cmd
+topic write device/relay_h743_001/up/#

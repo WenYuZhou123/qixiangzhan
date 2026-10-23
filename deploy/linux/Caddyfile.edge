@@ -1,0 +1,15 @@
+{
+    auto_https prefer_wildcard
+}
+
+edge.qixiangzhan.online {
+    tls {
+        issuer acme {
+            disable_http_challenge
+        }
+    }
+
+    encode zstd gzip
+
+    reverse_proxy backend:8000
+}

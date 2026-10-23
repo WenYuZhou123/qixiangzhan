@@ -1,0 +1,22 @@
+logLevel: info
+
+api: yes
+apiAddress: :9997
+
+authMethod: http
+authHTTPAddress: http://qixiangzhan-backend:8000/internal/media-auth
+
+rtsp: true
+rtspAddress: :8554
+
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8190
+webrtcLocalTCPAddress: :8190
+webrtcAdditionalHosts: [video.qixiangzhan.online]
+
+pathDefaults:
+  source: publisher
+
+paths:
+  drone-01: {}

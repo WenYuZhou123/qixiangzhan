@@ -340,6 +340,7 @@ ProtocolStatus_t Protocol_Parse(char *cmd)
     }
     else if (Protocol_StrEqual(cmd, "PAD_STOP"))
     {
+        Relay_AllOff();
         Protocol_SetStatusText("OK");
         Protocol_SetResponse("OK");
         return PROTOCOL_OK;

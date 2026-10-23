@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drone Video</title>
+<style>html,body,video{width:100%;height:100%;margin:0;background:#101820}video{object-fit:contain}#status{position:fixed;left:12px;bottom:12px;color:#fff;font:14px sans-serif;background:#0009;padding:6px 9px;border-radius:4px}</style>
+<video id="video" autoplay playsinline muted></video><div id="status">Connecting...</div>
+<script>
+const status = document.getElementById('status');
+const params = new URLSearchParams(location.hash.slice(1));
+const whepUrl = params.get('whep');
+const username = params.get('username');
+const password = params.get('password');
+const turnUrl = params.get('turnUrl');
+const turnUsername = params.get('turnUsername');
+const turnPassword = params.get('turnPassword');
+let sessionUrl = null;
+let peer = null;
+
+function setStatus(value) { status.textContent = value; }
+function waitIceComplete(pc) {
+  return new Promise(resolve => {
+    if (pc.iceGatheringState === 'complete') return resolve();
+    pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') resolve(); });
+  });
+}
+async function start() {
+  if (!whepUrl || !username || !password) throw new Error('Missing playback credentials');
+  const iceServers = turnUrl ? [{ urls: turnUrl, username: turnUsername, credential: turnPassword }] : [];
+  peer = new RTCPeerConnection({ iceServers });
+  peer.addTransceiver('video', { direction: 'recvonly' });
+  peer.ontrack = event => { document.getElementById('video').srcObject = event.streams[0]; setStatus('Live'); };
+  peer.onconnectionstatechange = () => setStatus(peer.connectionState === 'connected' ? 'Live' : peer.connectionState);
+  const offer = await peer.createOffer();
+  await peer.setLocalDescription(offer);
+  await waitIceComplete(peer);
+  const response = await fetch(whepUrl, { method: 'POST', headers: { 'Content-Type': 'application/sdp', 'Authorization': 'Basic ' + btoa(username + ':' + password) }, body: peer.localDescription.sdp });
+  if (!response.ok) throw new Error('WHEP request failed: ' + response.status);
+  sessionUrl = new URL(response.headers.get('location'), whepUrl).toString();
+  await peer.setRemoteDescription({ type: 'answer', sdp: await response.text() });
+}
+window.addEventListener('pagehide', () => { if (sessionUrl) fetch(sessionUrl, { method: 'DELETE', headers: { 'Authorization': 'Basic ' + btoa(username + ':' + password) }, keepalive: true }); if (peer) peer.close(); });
+start().catch(error => { console.error(error); setStatus(error.message); });
+</script>

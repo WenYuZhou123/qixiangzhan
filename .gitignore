@@ -1,5 +1,8 @@
 # Secrets
 *.env
+deploy/linux/mqtt-relay/passwordfile
+deploy/linux/mqtt-relay/data/
+deploy/linux/mqtt-relay/log/
 *.env.local
 *.signing.env
 *.signing.env.ps1
@@ -73,6 +76,10 @@ MDK-ARM/**/*.hex
 # Local temp helper files
 .git_filelist.txt
 tmp_*.pdf
+
+# ESP-IDF machine-local configuration; credentials belong in NVS or menuconfig.
+esp32-local-panel/sdkconfig
+esp32-local-panel/sdkconfig.old
 
 # Runtime / local data
 tmp/

@@ -1,11 +1,13 @@
 #include "AuthSession.h"
 
 #include <QDateTime>
+#include <QDebug>
 #include <QEventLoop>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSslError>
 #include <QTimer>
 #include <QUrl>
 
@@ -140,7 +142,20 @@ void AuthSession::login(const QString &usernameValue, const QString &password)
     QJsonObject body;
     body.insert(QStringLiteral("username"), normalizedUser);
     body.insert(QStringLiteral("password"), password);
+    qInfo().noquote() << "Auth login request:" << request.url().toString()
+                      << "user:" << normalizedUser;
     QNetworkReply *reply = m_network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+
+    connect(reply, &QNetworkReply::sslErrors, this, [reply](const QList<QSslError> &errors) {
+        QStringList descriptions;
+        descriptions.reserve(errors.size());
+        for (const QSslError &error : errors)
+        {
+            descriptions.append(error.errorString());
+        }
+        qWarning().noquote() << "Auth login TLS errors for" << reply->url().toString()
+                             << descriptions.join(QStringLiteral(" | "));
+    });
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, normalizedUser, password]() {
         handleReply(reply, normalizedUser, password);
@@ -292,6 +307,10 @@ void AuthSession::handleReply(QNetworkReply *reply, const QString &usernameValue
 {
     const QByteArray payload = reply->readAll();
     const QJsonDocument json = QJsonDocument::fromJson(payload);
+    qInfo().noquote() << "Auth login reply:" << reply->url().toString()
+                      << "http:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
+                      << "networkError:" << static_cast<int>(reply->error())
+                      << "message:" << reply->errorString();
 
     if (reply->error() == QNetworkReply::NoError && json.isObject())
     {

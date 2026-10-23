@@ -1,0 +1,14 @@
+[Unit]
+Description=USB camera ROS publisher for video relay
+After=network-online.target ros-master.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jit
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/jit/drone_ws/devel/setup.bash && rosrun bench_uav_validation usb_camera_node _device:=0 _width:=640 _height:=480 _fps:=15'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

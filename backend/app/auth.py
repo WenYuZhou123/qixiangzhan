@@ -80,6 +80,77 @@ def build_access_token(user: User, now: datetime | None = None) -> tuple[str, da
     return token, expires_at
 
 
+def issue_media_credentials(
+    user: User,
+    device_id: str,
+    stream_path: str | None = None,
+    now: datetime | None = None,
+) -> tuple[str, str, datetime]:
+    issued_at = now or utcnow()
+    expires_at = issued_at + timedelta(seconds=max(15, settings.media_ticket_seconds))
+    nonce = secrets.token_urlsafe(12)
+    media_path = (stream_path or device_id).strip()
+    # HTTP Basic uses ':' as the username/password delimiter, so the username
+    # itself must not contain a colon.
+    username = f"viewer~{user.id}~{device_id}~{media_path}~{int(expires_at.timestamp())}~{nonce}"
+    password = hmac.new(
+        settings.media_auth_secret.encode("utf-8"),
+        username.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return username, password, expires_at
+
+
+def _media_ticket_parts(username: str, stream_path: str) -> tuple[int, str, int] | None:
+    parts = username.split("~")
+    if len(parts) == 6 and parts[0] == "viewer" and parts[3] == stream_path:
+        user_text, device_id, expires_text = parts[1], parts[2], parts[4]
+    else:
+        # Tickets from before the Basic-auth-safe format change are retained
+        # for validation compatibility, but cannot be used as Basic usernames.
+        parts = username.split(":")
+        if len(parts) == 6 and parts[0] == "viewer" and parts[3] == stream_path:
+            user_text, device_id, expires_text = parts[1], parts[2], parts[4]
+        elif len(parts) == 5 and parts[0] == "viewer" and parts[2] == stream_path:
+            # Accept tickets issued before stream paths were separated from device IDs.
+            user_text, device_id, expires_text = parts[1], parts[2], parts[3]
+        else:
+            return None
+    try:
+        return int(user_text), device_id, int(expires_text)
+    except ValueError:
+        return None
+
+
+def verify_media_credentials(username: str, password: str, stream_path: str, now: datetime | None = None) -> bool:
+    ticket = _media_ticket_parts(username, stream_path)
+    if ticket is None or ticket[2] <= int((now or utcnow()).timestamp()):
+        return False
+    expected = hmac.new(
+        settings.media_auth_secret.encode("utf-8"), username.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, password)
+
+
+def media_ticket_user_id(username: str, stream_path: str) -> int | None:
+    ticket = _media_ticket_parts(username, stream_path)
+    return ticket[0] if ticket is not None else None
+
+
+def media_ticket_device_id(username: str, stream_path: str) -> str | None:
+    ticket = _media_ticket_parts(username, stream_path)
+    return ticket[1] if ticket is not None else None
+
+
+def issue_turn_credentials(user: User, now: datetime | None = None) -> tuple[str, str]:
+    expires_at = int(((now or utcnow()) + timedelta(minutes=10)).timestamp())
+    username = f"{expires_at}:{user.id}"
+    password = base64.b64encode(
+        hmac.new(settings.turn_auth_secret.encode("utf-8"), username.encode("utf-8"), hashlib.sha1).digest()
+    ).decode("ascii")
+    return username, password
+
+
 def decode_access_token(token: str) -> dict:
     try:
         payload = jwt.decode(

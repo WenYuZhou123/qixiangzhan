@@ -3,6 +3,7 @@
 #include "sensor_wind_zts.h"
 #include "sensor_air_cj702.h"
 #include "sensor_rain.h"
+#include "panel_link.h"
 #include "adc.h"
 #include "weather_data.h"
 #include "stm32h7xx_hal.h"
@@ -48,6 +49,7 @@ void AppWeather_Init(void)
     WindSensor_Init();
     AirSensor_Init();
     RainSensor_Init();
+    PanelLink_Init();
 
     g_weather_data.wind_speed_mps = 0.0f;
     g_weather_data.wind_dir_deg = 0.0f;
@@ -102,7 +104,11 @@ void AppWeather_Task(void)
     if ((now - tick_wind_refresh) >= APP_WIND_REFRESH_PERIOD_MS)
     {
         tick_wind_refresh = now;
-        WindSensor_Poll();
+        PanelLink_Task();
+        if (PanelLink_IsTransactionActive() == 0U)
+        {
+            WindSensor_Poll();
+        }
     }
 
     if ((now - tick_air_refresh) >= APP_AIR_REFRESH_PERIOD_MS)

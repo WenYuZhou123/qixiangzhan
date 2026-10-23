@@ -1,0 +1,21 @@
+services:
+  qixiangzhan-backend:
+    build:
+      context: ../..
+      dockerfile: deploy/linux/Dockerfile
+    container_name: qixiangzhan-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - qixiangzhan-data:/data
+    networks:
+      - public
+
+volumes:
+  qixiangzhan-data:
+
+networks:
+  public:
+    external: true
+    name: unitree-server_public

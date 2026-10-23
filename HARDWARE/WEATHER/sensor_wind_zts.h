@@ -31,5 +31,6 @@ extern WindSensor_t g_wind_sensor;
 void WindSensor_Init(void);
 void WindSensor_Poll(void);
 void WindSensor_Parse(void);
+uint8_t WindSensor_IsBusy(void);
 
 #endif

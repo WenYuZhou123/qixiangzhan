@@ -1,0 +1,21 @@
+# Append this site block to the Caddyfile used by the shared HTTPS proxy.
+# The qixiangzhan-backend container must join the same Docker network as Caddy.
+api.qixiangzhan.online {
+    encode zstd gzip
+
+    @video_viewer path /video/viewer.html
+    handle @video_viewer {
+        uri replace /video/viewer.html /
+        reverse_proxy qixiangzhan-video-viewer:80
+    }
+
+    @video_whep path /video/drone-01/whep*
+    handle @video_whep {
+        uri strip_prefix /video
+        reverse_proxy qixiangzhan-video-mediamtx:8889
+    }
+
+    handle {
+        reverse_proxy qixiangzhan-backend:8000
+    }
+}

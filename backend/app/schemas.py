@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -300,8 +300,132 @@ class DeviceMembershipRequest(BaseModel):
     device_ids: list[str]
 
 
+class VideoCredentialsResponse(BaseModel):
+    device_id: str
+    whep_url: str
+    username: str
+    password: str
+    expires_at: datetime
+    turn_url: str
+    turn_username: str
+    turn_password: str
+
+
+class MediaAuthRequest(BaseModel):
+    user: str = ""
+    password: str = ""
+    action: str = ""
+    path: str = ""
+    protocol: str = ""
+
+
 class RealtimeEvent(BaseModel):
     type: str
     device_id: str | None = None
     timestamp: datetime
     payload: Any
+
+
+class EdgeCapabilities(BaseModel):
+    wind: bool
+    air: bool
+    rain: bool
+
+
+class EdgeWeather(BaseModel):
+    wind_speed_mps: float
+    wind_direction_deg: float
+    temperature_c: float
+    humidity_rh: float
+    rain_detected: bool
+    rain_value: float
+    pm25_ugm3: float
+    pm10_ugm3: float
+    co2_ppm: float
+    tvoc_mg_m3: float
+    ch2o_mg_m3: float
+    capabilities: EdgeCapabilities
+
+
+class EdgeFusion(BaseModel):
+    risk_level: Literal["normal", "caution", "danger", "unknown"]
+    data_valid: bool
+    reason: str = ""
+
+
+class EdgeRelays(BaseModel):
+    left_on: bool
+    right_on: bool
+
+
+class EdgeForecastSummary(BaseModel):
+    available: bool
+    next_three_hour_risk: Literal["normal", "caution", "danger", "unknown"] = "unknown"
+    local_correction_applied: bool = False
+    hours: list[dict[str, Any]] = Field(default_factory=list, max_length=3)
+
+
+class EdgeAnalyzeRequest(BaseModel):
+    device_id: str = Field(min_length=1, max_length=128)
+    snapshot_id: int = Field(ge=0, le=255)
+    captured_uptime_ms: int = Field(ge=0)
+    status_age_ms: int = Field(ge=0)
+    relays: EdgeRelays
+    weather: EdgeWeather
+    fusion: EdgeFusion
+    forecast: EdgeForecastSummary | None = None
+
+
+class AIModelResult(BaseModel):
+    risk_level: Literal["normal", "caution", "danger", "unknown"]
+    summary: str = Field(min_length=1, max_length=160)
+    reasons: list[str] = Field(default_factory=list, max_length=3)
+    recommended_action: Literal["none", "pad_open", "pad_close", "pad_stop", "query_status"]
+    requires_confirmation: bool = True
+
+
+class EdgeAnalyzeResponse(AIModelResult):
+    analysis_id: int
+
+
+class ForecastObservation(BaseModel):
+    wind_speed_mps: float = Field(ge=0, le=80)
+    wind_direction_deg: float = Field(ge=0, le=360)
+    temperature_c: float = Field(ge=-80, le=80)
+    humidity_rh: float = Field(ge=0, le=100)
+    rain_detected: bool
+    wind_online: bool
+    rain_online: bool
+
+
+class EdgeForecastRequest(BaseModel):
+    device_id: str = Field(min_length=1, max_length=128)
+    location_name: str = Field(default="", max_length=64)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=64)
+    observation: ForecastObservation
+
+
+class ForecastHourResponse(BaseModel):
+    time: str
+    temperature_c: float
+    humidity_rh: int
+    precipitation_probability: int
+    precipitation_mm: float
+    wind_speed_mps: float
+    wind_gust_mps: float
+    wind_direction_deg: int
+    weather_code: int
+    risk_level: Literal["normal", "caution", "danger", "unknown"]
+
+
+class EdgeForecastResponse(BaseModel):
+    source: Literal["open-meteo"] = "open-meteo"
+    location_name: str
+    timezone: str
+    generated_at: datetime
+    expires_at: datetime
+    next_three_hour_risk: Literal["normal", "caution", "danger", "unknown"]
+    local_correction_applied: bool
+    hours: list[ForecastHourResponse] = Field(min_length=12, max_length=12)

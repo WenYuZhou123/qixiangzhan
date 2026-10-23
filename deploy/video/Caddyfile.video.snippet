@@ -1,0 +1,16 @@
+video.qixiangzhan.online {
+    encode zstd gzip
+
+    @viewer path /viewer.html
+    handle @viewer {
+        root * /opt/qixiangzhan/deploy/video/viewer
+        file_server
+    }
+
+    @whep path /drone-01/whep*
+    handle @whep {
+        reverse_proxy 127.0.0.1:8889
+    }
+
+    respond "Not found" 404
+}

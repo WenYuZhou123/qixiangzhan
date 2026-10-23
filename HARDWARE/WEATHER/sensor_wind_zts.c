@@ -428,3 +428,8 @@ void WindSensor_Parse(void)
 {
     /* Wind sensors use non-blocking Modbus polling; no async parser is needed. */
 }
+
+uint8_t WindSensor_IsBusy(void)
+{
+    return s_query_state.waiting;
+}

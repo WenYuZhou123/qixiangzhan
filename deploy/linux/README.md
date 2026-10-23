@@ -1,6 +1,7 @@
 # Linux / Jetson 部署包
 
 这个目录放 Jetson 或 Linux 主机部署后端时需要的样例文件。当前公网入口采用 Cloudflare Tunnel，腾讯云 80/443 直连不再作为验收条件。
+This folder contains production-oriented Linux deployment options for the platform.
 
 ## 文件
 
@@ -8,6 +9,49 @@
 - `backup_mysql.sh`：MySQL 每日备份脚本，默认保留 7 天。
 - `Caddyfile`：本机反向代理样例，可用于 Jetson 本地 HTTP/HTTPS 入口或 tunnel 前置代理。
 - `../../backend/alembic/`：后端数据库版本迁移。
+- `Caddyfile`: HTTPS reverse proxy sample for `api.qixiangzhan.online`
+- `qixiangzhan-backend.service`: systemd service for FastAPI
+- `backup_mysql.sh`: daily MySQL backup script with 7-day retention
+- `docker-compose.shared-proxy.yml`: isolated deployment for a server that already runs the shared Caddy proxy
+- `docker-compose.edge.yml`: standalone backend and Caddy deployment for `edge.qixiangzhan.online`
+
+## Shared Caddy proxy deployment
+
+Use this option when the host already has a Caddy container on Docker network
+`unitree-server_public`. The backend remains private to that network and stores
+its single-instance SQLite database in the `qixiangzhan-data` Docker volume.
+
+1. Copy `backend/` and `deploy/linux/` to `/opt/qixiangzhan/`.
+2. Copy `.env.docker.example` to `.env`, then replace the MQTT password,
+   administrator password, and token secret with production values.
+3. Start the service:
+
+```bash
+sudo docker compose -f /opt/qixiangzhan/deploy/linux/docker-compose.shared-proxy.yml up -d --build
+```
+
+4. Append `Caddyfile.shared-proxy.snippet` to the shared Caddyfile, validate
+   it in the Caddy container, and reload Caddy.
+
+The DNS record for `api.qixiangzhan.online` must resolve to the server before
+the public HTTPS endpoint can be verified.
+
+## Standalone edge deployment
+
+Use this option for a standalone edge server. It includes its own Caddy
+container and keeps the FastAPI container private. The supplied Compose file
+publishes only port 443 and uses the TLS-ALPN ACME challenge, allowing a host
+that already reserves port 80 for MQTT to remain unchanged.
+
+1. Add a DNS-only A record: `edge.qixiangzhan.online` to the server public IP.
+2. Copy `.env.edge.example` to `.env` and replace every `replace-with-*` value.
+3. Start the stack from this directory:
+
+```bash
+sudo docker compose -f docker-compose.edge.yml up -d --build
+```
+
+4. Verify `https://edge.qixiangzhan.online/healthz` after DNS propagation.
 
 ## 推荐目录
 

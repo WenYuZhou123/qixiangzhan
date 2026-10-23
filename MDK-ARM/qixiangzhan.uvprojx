@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H743xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../HARDWARE;../HARDWARE/APP;../HARDWARE/RElAY;../HARDWARE/KEY;../HARDWARE/L610;../HARDWARE/PROTOCOL;../HARDWARE/CONSOLE;../HARDWARE/WEATHER;../HARDWARE/LCD</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../HARDWARE;../HARDWARE/APP;../HARDWARE/RElAY;../HARDWARE/KEY;../HARDWARE/L610;../HARDWARE/PROTOCOL;../HARDWARE/CONSOLE;../HARDWARE/WEATHER;../HARDWARE/PANEL_LINK;../HARDWARE/LCD</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -736,6 +736,11 @@
               <FilePath>..\HARDWARE\WEATHER\weather_data.c</FilePath>
             </File>
             <File>
+              <FileName>panel_link.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\PANEL_LINK\panel_link.c</FilePath>
+            </File>
+            <File>
               <FileName>app_weather.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\HARDWARE\WEATHER\app_weather.h</FilePath>
@@ -779,6 +784,11 @@
               <FileName>weather_data.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\HARDWARE\WEATHER\weather_data.h</FilePath>
+            </File>
+            <File>
+              <FileName>panel_link.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\HARDWARE\PANEL_LINK\panel_link.h</FilePath>
             </File>
             <File>
               <FileName>lcd_port.c</FileName>

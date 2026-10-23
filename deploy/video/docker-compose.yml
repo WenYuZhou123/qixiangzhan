@@ -1,0 +1,32 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.10.0
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "8554:8554/tcp"
+      - "127.0.0.1:8889:8889/tcp"
+      - "8189:8189/tcp"
+      - "8189:8189/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    env_file: .env
+    command:
+      - --no-cli
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_AUTH_SECRET}
+      - --realm=${TURN_REALM}
+      - --min-port=49160
+      - --max-port=49200
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"

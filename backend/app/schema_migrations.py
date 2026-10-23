@@ -1,6 +1,8 @@
 from sqlalchemy import inspect, text
 
 from .database import Base, engine
+# Import models before create_all so this module also works when invoked directly.
+from . import models as _models  # noqa: F401
 
 
 def _column_names(table_name: str) -> set[str]:

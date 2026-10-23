@@ -1,0 +1,51 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.10.0
+    container_name: qixiangzhan-video-mediamtx
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "8555:8554/tcp"
+      - "127.0.0.1:8890:8889/tcp"
+      - "127.0.0.1:9998:9997/tcp"
+      - "8190:8190/tcp"
+      - "8190:8190/udp"
+    networks:
+      - public
+
+  viewer:
+    image: nginx:1.27-alpine
+    container_name: qixiangzhan-video-viewer
+    restart: unless-stopped
+    volumes:
+      - ../viewer:/usr/share/nginx/html:ro
+    networks:
+      - public
+
+  coturn:
+    image: coturn/coturn:4.6.3
+    container_name: qixiangzhan-video-coturn
+    restart: unless-stopped
+    env_file: .env
+    command:
+      - --no-cli
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_AUTH_SECRET}
+      - --realm=${TURN_REALM}
+      - --external-ip=116.62.108.69
+      - --min-port=49210
+      - --max-port=49250
+    ports:
+      - "3479:3478/tcp"
+      - "3479:3478/udp"
+      - "49210-49250:49210-49250/udp"
+    networks:
+      - public
+
+networks:
+  public:
+    external: true
+    name: unitree-server_public

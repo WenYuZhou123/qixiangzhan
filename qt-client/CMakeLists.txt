@@ -10,7 +10,7 @@ if(DEFINED ENV{QXZ_CLIENT_DEFAULT_API_BASE} AND NOT "$ENV{QXZ_CLIENT_DEFAULT_API
     set(QXZ_CLIENT_DEFAULT_API_BASE "$ENV{QXZ_CLIENT_DEFAULT_API_BASE}" CACHE STRING "Default API base used by the Qt client" FORCE)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Quick Mqtt Network Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Quick Mqtt Network Sql WebView)
 find_package(Qt6 6.5 COMPONENTS SerialPort QUIET)
 find_package(Qt6 6.5 COMPONENTS WebSockets QUIET)
 
@@ -44,6 +44,8 @@ qt_add_executable(relay_qt_client
     src/data/RemoteSyncService.cpp
     src/data/UserAdminService.h
     src/data/UserAdminService.cpp
+    src/data/VideoStreamService.h
+    src/data/VideoStreamService.cpp
     src/domain/CommandTracker.h
     src/domain/CommandTracker.cpp
     src/domain/DeviceStateStore.h
@@ -78,6 +80,7 @@ qt_add_qml_module(relay_qt_client
         qml/ui/StatusPill.qml
         qml/ui/TaskTheme.qml
         qml/ui/UserManagementPage.qml
+        qml/ui/VideoPage.qml
         qml/ui/WeatherPage.qml
 )
 
@@ -93,6 +96,7 @@ target_link_libraries(relay_qt_client
         Qt6::Mqtt
         Qt6::Network
         Qt6::Sql
+        Qt6::WebView
         qt6keychain
 )
 
@@ -121,4 +125,16 @@ if(ANDROID)
     set_target_properties(relay_qt_client PROPERTIES
         QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
     )
+
+    set(QXZ_ANDROID_TLS_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android/libs/${ANDROID_ABI}")
+    set(QXZ_ANDROID_TLS_LIBS
+        "${QXZ_ANDROID_TLS_LIB_DIR}/libcrypto_3.so"
+        "${QXZ_ANDROID_TLS_LIB_DIR}/libssl_3.so"
+    )
+    foreach(tls_library IN LISTS QXZ_ANDROID_TLS_LIBS)
+        if(NOT EXISTS "${tls_library}")
+            message(FATAL_ERROR "Android OpenSSL runtime library is missing: ${tls_library}")
+        endif()
+    endforeach()
+    set_property(TARGET relay_qt_client PROPERTY QT_ANDROID_EXTRA_LIBS "${QXZ_ANDROID_TLS_LIBS}")
 endif()
