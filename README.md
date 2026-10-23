@@ -1,66 +1,53 @@
-# qixiangzhan 气象站边缘主站
+# 气象站边缘主站
 
-这是一个面向现场落地的气象站与远程运维平台工程，核心形态是：
-
-- `STM32H743 + L610 + LCD` 负责本地采集、显示、4G/MQTT 上报和现场控制。
-- `Jetson + FastAPI + MySQL + MQTT bridge` 负责边缘主站、数据入库、健康监控和本地服务。
-- `Qt Desktop + Qt Android` 负责桌面值守、移动端查看、命令下发、告警和历史数据。
-- `Cloudflare Tunnel` 负责公网 HTTPS 访问，不再依赖腾讯云 80/443 入口。
-
-当前正式 API 地址：
-
-```text
-https://qixiangzhan.online/api/v1
-```
-
-健康检查地址：
-
-```text
-https://qixiangzhan.online/healthz
-```
+面向无人机停机坪现场的气象采集、远程控制和运维平台。系统由 STM32 现场控制器、ESP32-S3 本地触摸面板、L610 MQTT 链路、FastAPI 边缘服务，以及 Qt 桌面端/Android 客户端组成。
 
 ## 系统架构
 
 ```text
-STM32H743 + Sensors + LCD
-        |
-        | L610 / MQTT TLS
-        v
-      EMQX
-        |
-        v
-Jetson edge master
-  - FastAPI
-  - MySQL
-  - MQTT bridge
-  - system health
-        |
-        | Cloudflare Tunnel / HTTPS / WebSocket
-        v
-Qt Desktop / Qt Android / Browser docs
+STM32H743 + sensors + LCD <---- RS485 ----> ESP32-S3 touch panel
+          |
+          | L610 / MQTT TLS
+          v
+        EMQX
+          |
+          v
+FastAPI edge service + database + MQTT bridge
+          |                         |
+          | HTTPS / WebSocket       | OpenAI-compatible provider
+          v                         v
+Qt Desktop / Android             AI analysis and forecast
 ```
 
-## 仓库目录
+主要能力：
+
+- STM32H743 采集风速风向、雨量、空气质量等传感器数据，并执行继电器和停机坪控制命令。
+- L610 通过 MQTT TLS 上报状态、接收命令并完成 ACK 闭环。
+- ESP32-S3 本地面板显示实时状态、气象、停机坪和系统诊断，可配置 Wi-Fi 与边缘 AI 服务。
+- 后端提供鉴权、设备状态、历史记录、告警、MQTT 桥接、系统健康检查、AI 分析与天气预报接口。
+- Qt 桌面端和 Android 客户端通过 HTTPS/WebSocket 进行远程值守、查看告警和下发控制命令。
+- 可选 WebRTC 图传部署由 MediaMTX、coturn 和 Jetson 视频转发组成。
+
+## 目录
 
 ```text
 qixiangzhan/
-├─ Core/                 STM32CubeMX 生成代码，谨慎改动路径
-├─ Drivers/              STM32 HAL / CMSIS，工具链依赖目录
-├─ MDK-ARM/              Keil 工程文件和启动文件
-├─ HARDWARE/             L610、LCD、传感器、业务驱动代码
-├─ backend/              FastAPI 后端、MySQL 模型、MQTT bridge
-├─ qt-client/            Qt 桌面端和 Android App
-├─ deploy/linux/         Jetson/Linux 部署样例、systemd、Caddy、备份脚本
-├─ docs/                 部署、联调、数据库、验收文档
-├─ scripts/              Windows 构建、启动、Qt/Android 辅助脚本
-└─ qixiangzhan.ioc       STM32CubeMX 工程入口
+├─ Core/                 STM32CubeMX 生成代码
+├─ HARDWARE/             传感器、L610、RS485、协议和业务驱动
+├─ Drivers/              STM32 HAL / CMSIS
+├─ MDK-ARM/              Keil 工程与启动文件
+├─ esp32-local-panel/    ESP32-S3-Touch-LCD-7 本地面板工程
+├─ backend/              FastAPI、数据模型、MQTT bridge、AI/预报服务
+├─ qt-client/            Qt 桌面端与 Android 客户端
+├─ deploy/linux/         Linux/Jetson 后端部署样例
+├─ deploy/video/         MediaMTX、coturn、Jetson 视频转发部署样例
+├─ docs/                 平台、数据库和联调文档
+└─ scripts/              构建与启动辅助脚本
 ```
 
-更详细的代码地图见 [docs/repository_map_zh.md](docs/repository_map_zh.md)。
+## 本地启动
 
-## 快速启动
-
-### 1. 启动后端
+### 后端
 
 ```powershell
 Set-Location D:\Competition\code_main\qixiangzhan\backend
@@ -68,153 +55,70 @@ py -3.14 -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
-alembic -c alembic.ini upgrade head
 py -3.14 -m uvicorn app.main:app --reload
 ```
 
-本地后端默认监听：
+本地健康检查：`http://127.0.0.1:8000/healthz`。
 
-```text
-http://127.0.0.1:8000
-```
+生产环境应使用 `.env.example` 作为模板，配置数据库、MQTT、令牌密钥和边缘服务密钥；不要提交 `.env`。
 
-### 2. 启动 Qt 桌面端
+### Qt 桌面端与 Android
 
 ```powershell
 Set-Location D:\Competition\code_main\qixiangzhan
 .\scripts\start_desktop_stack.cmd
-```
-
-桌面端和 Android App 的生产 API 默认值已经统一为：
-
-```text
-https://qixiangzhan.online/api/v1
-```
-
-### 3. 构建 Android APK
-
-```powershell
-Set-Location D:\Competition\code_main\qixiangzhan
 .\scripts\build_android_apk.cmd
 ```
 
-Release 包可通过环境变量覆盖 API：
+客户端通过 HTTPS API 工作，不直接连接 MQTT 或数据库。API 地址可由客户端设置页或构建环境变量覆盖。
+
+### ESP32-S3 本地面板
+
+使用 ESP-IDF 6.0.2：
 
 ```powershell
-$env:QXZ_CLIENT_DEFAULT_API_BASE = "https://qixiangzhan.online/api/v1"
-.\scripts\build_android_apk.cmd -Configuration Release
+Set-Location D:\Competition\code_main\qixiangzhan\esp32-local-panel
+idf.py set-target esp32s3
+idf.py menuconfig
+idf.py build
+idf.py -p COMx flash monitor
 ```
 
-## 交付验收路径
+在 `menuconfig -> Cloud AI` 设置初始 Wi-Fi、边缘 API URL、边缘密钥和设备 ID。设备屏幕的“设置”页也可以修改 Wi-Fi 与边缘服务，保存后写入 NVS 并覆盖编译默认值。
 
-### Jetson / 后端
+`sdkconfig` 与 `sdkconfig.old` 是本机配置，已被 Git 忽略。提交 `sdkconfig.defaults` 时必须保持 Wi-Fi 密码和 API Key 为空。
 
-- `GET https://qixiangzhan.online/healthz` 返回 `status=ok`。
-- `POST /api/v1/auth/login` 可登录。
-- `GET /api/v1/devices` 能返回设备列表。
-- `GET /api/v1/system/health` 能看到 API、MySQL、MQTT、磁盘和最近设备数据。
-- MQTT 上报后，`devices`、`telemetry_messages`、`weather_observations`、`weather.project` 数据持续增长。
+推荐生产模式是让 ESP32 请求后端的：
 
-### Qt 桌面端
-
-- 使用 `https://qixiangzhan.online/api/v1` 登录。
-- 能查看设备在线状态、核心气象数据、告警、命令历史和 Jetson 健康摘要。
-- 工程模式下可使用串口诊断和本地调试功能。
-
-### Android App
-
-- 使用公网 HTTPS API 登录，不直接连接 MQTT 或 MySQL。
-- 设备列表、实时状态、历史、告警和控制命令可用。
-- 弱网或 WebSocket 不可用时，REST 轮询仍能保持基本可用。
-
-### STM32 / 现场端
-
-- LCD 页面无明显整屏闪烁。
-- L610 MQTT 链路能稳定连接 EMQX。
-- 风速/风向、雨滴、CJ702 空气质量等传感器状态能上报诊断信息。
-- 控制命令有 ACK 闭环。
-
-## 关键文档
-
-- 文档导航：[docs/README.md](docs/README.md)
-- Jetson 现场部署：[docs/jetson_edge_master_guide_zh.md](docs/jetson_edge_master_guide_zh.md)
-- Qt/Android 客户端：[qt-client/README.md](qt-client/README.md)
-- 后端服务：[backend/README.md](backend/README.md)
-- Linux 部署包：[deploy/linux/README.md](deploy/linux/README.md)
-- Navicat/MySQL：[docs/navicat_mysql_setup.md](docs/navicat_mysql_setup.md)
-- 硬件联调：[docs/h743_l610_qt_quick_start.md](docs/h743_l610_qt_quick_start.md)
-
-## Git 提交建议
-
-建议提交：
-
-- `HARDWARE/`、`Core/`、`Drivers/`、`MDK-ARM/` 中的固件源码和工程定义。
-- `backend/` 后端源码、迁移脚本和依赖清单。
-- `qt-client/` 客户端源码、QML、CMake 配置。
-- `docs/`、`deploy/`、`scripts/`。
-- `README.md`、`.gitignore`、`.gitattributes`、`.editorconfig`。
-
-不要提交：
-
-- Python 虚拟环境、`.env`、密钥、证书、Android keystore。
-- Qt/Android 构建目录、APK/AAB、本地 DLL/EXE 输出。
-- Keil 中间产物和输出文件。
-- 本地数据库、日志、临时文件。
-
-本仓库保留 STM32CubeMX/Keil 的原始目录布局。除非同步更新工具链配置，不要移动 `Core/`、`Drivers/`、`MDK-ARM/` 或 `qixiangzhan.ioc`。
-- 固件源码与头文件
-- `backend/` 后端源码
-- `qt-client/` 客户端源码
-- `docs/`
-- `deploy/linux/`
-- `scripts/`
-- Keil 工程定义文件：`*.uvprojx`、`*.sct`、`RTE_Components.h`、`*.dbgconf`
-
-不建议提交：
-
-- Python 虚拟环境
-- Qt / Android 构建目录
-- Keil 中间产物与输出文件：`.crf`、`.d`、`.dep`、`.map`、`.htm`、`.hex`、`.lnp`
-- 本机 Keil 配置文件：`MDK-ARM/qixiangzhan.uvoptx`
-- 本地数据库、日志、缓存
-- keystore、签名文件、`.env`
-- 临时 PDF、调试草稿和本地手册文件
-
-行尾与文本文件约定：
-
-- 源码、文档和普通配置文本默认使用 LF
-- Windows 启动脚本与 PowerShell 脚本保留 CRLF
-- 重新打开 Keil 工程后，如果只出现 `uvoptx`、`map`、`hex`、构建日志等变化，默认不要提交
-
-## Qt 客户端启动脚本
-
-以下脚本按当前本机目录约定编写，直接在 PowerShell 中执行即可。
-
-### 启动 Qt 桌面端
-
-```powershell
-Set-Location D:\Competition\code_main\qixiangzhan
-$exe = "D:\Competition\code_main\qixiangzhan\qt-client\build\desktop-mingw\relay_qt_client.exe"
-Get-Process relay_qt_client -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Process -FilePath $exe
+```text
+POST /api/v1/edge/ai/analyze
 ```
 
-### 使用雷电模拟器启动 Android App
+此模式使用 `X-QXZ-Edge-Key`，后端再调用云模型。直连 OpenAI 兼容接口仅适合受限额度的专用密钥和测试环境。
 
-```powershell
-Set-Location D:\Competition\code_main\qixiangzhan
-$ldAdb = "D:\leidian\LDPlayer9\adb.exe"
-$activity = "com.qixiangzhan.platform/org.qtproject.qt.android.bindings.QtActivity"
-& $ldAdb devices
-& $ldAdb -s emulator-5554 shell am start -W -n $activity
-```
+## 远程服务与验收
 
-### 重新安装当前 APK 到雷电模拟器
+- `GET /healthz`：后端存活检查。
+- `GET /api/v1/system/health`：鉴权后的 API、数据库、MQTT、磁盘与设备摘要。
+- `POST /api/v1/edge/ai/analyze`：ESP32 边缘 AI 分析接口。
+- `POST /api/v1/edge/weather/forecast`：ESP32 气象预报接口。
+- `WS /api/v1/ws/realtime`：客户端实时状态推送。
 
-```powershell
-Set-Location D:\Competition\code_main\qixiangzhan
-$ldAdb = "D:\leidian\LDPlayer9\adb.exe"
-$apk = "D:\Competition\code_main\qixiangzhan\qixiangzhan-android-debug.apk"
-& $ldAdb -s emulator-5554 install -r $apk
-& $ldAdb -s emulator-5554 shell am start -W -n com.qixiangzhan.platform/org.qtproject.qt.android.bindings.QtActivity
-```
+ESP32 边缘接口不使用用户 JWT，而是使用独立的设备密钥。用户端接口除登录、刷新和退出外，均需要 Bearer Token。
+
+## 视频链路
+
+WebRTC 图传是可选模块。部署 MediaMTX/coturn 与 Jetson 视频转发前，请阅读 [视频部署说明](deploy/video/README.md)。视频域名不能经过 Cloudflare HTTP 代理，且需要按该文档开放 WebRTC、TURN 和 RTSP 端口。
+
+## 文档入口
+
+- [后端说明](backend/README.md)
+- [ESP32 本地面板说明](esp32-local-panel/README.md)
+- [Qt 客户端说明](qt-client/README.md)
+- [Linux/Jetson 部署说明](deploy/linux/README.md)
+- [视频部署说明](deploy/video/README.md)
+- [项目文档目录](docs/README.md)
+
+## 版本控制与密钥
+
+提交源码、构建配置模板和部署样例；不要提交 `.env`、Wi-Fi 密码、API Key、证书、Android keystore、构建输出、数据库、日志或本机 Keil 配置。STM32CubeMX/Keil 目录结构与 `qixiangzhan.ioc` 彼此关联，除非同步修改工具链配置，不要移动 `Core/`、`Drivers/` 或 `MDK-ARM/`。
